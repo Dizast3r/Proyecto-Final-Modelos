@@ -6,11 +6,13 @@ Permite guardar el estado del jugador y restaurarlo cuando sea necesario
 class PlayerMemento:
     """Memento que guarda el estado del jugador"""
     
-    def __init__(self, x, y):
+    def __init__(self, x, y,speed, jump_power):
         self._x = x
         self._y = y
-        self._velocity_x = 0
+        self._velocity_x = 0 #el personaje volvio al checkpoint no se esta moviendo nada
         self._velocity_y = 0
+        self.speed = speed
+        self.jump_power = jump_power
 
     
     def get_state(self):
@@ -19,7 +21,9 @@ class PlayerMemento:
             'x': self._x,
             'y': self._y,
             'velocity_x': self._velocity_x,
-            'velocity_y': self._velocity_y
+            'velocity_y': self._velocity_y,
+            'speed': self.speed,
+            'jump_power': self.jump_power
         }
 
 

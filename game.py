@@ -6,6 +6,11 @@ import pygame
 from memento import PlayerMemento, CheckpointManager
 from commands import InputHandler
 
+DEFAULT_SPEED = 5
+DEFAULT_JUMP_POWER = 15
+DEFAULT_GRAVITY = 0.8
+DEFAULT_LIVES = 3
+
 class Player:
     """Clase del jugador que puede guardar y restaurar su estado"""
     
@@ -16,11 +21,11 @@ class Player:
         self.height = 60
         self.velocity_x = 0
         self.velocity_y = 0
-        self.speed = 5
-        self.jump_power = 15
-        self.gravity = 0.8
+        self.speed = DEFAULT_SPEED
+        self.jump_power = DEFAULT_JUMP_POWER
+        self.gravity = DEFAULT_GRAVITY
         self.on_ground = False
-        self.lives = 3
+        self.lives = DEFAULT_LIVES
         
         # Aquí puedes cargar tu imagen del personaje
         # self.image = pygame.image.load('player.png')
@@ -95,7 +100,7 @@ class Player:
     
     def create_memento(self):
         """Crea un memento con el estado actual"""
-        return PlayerMemento(self.x, self.y)
+        return PlayerMemento(self.x, self.y, DEFAULT_SPEED, DEFAULT_JUMP_POWER) #Si tenia mejoras no no, se perdieron
     
     def restore_from_memento(self, memento):
         """Restaura el estado desde un memento"""
@@ -105,6 +110,8 @@ class Player:
             self.y = state['y']
             self.velocity_x = state['velocity_x']
             self.velocity_y = state['velocity_y']
+            self.speed = state['speed']
+            self.jump_power = state['jump_power']
     
     def get_rect(self):
         """Retorna el rectángulo de colisión"""
@@ -288,6 +295,7 @@ class Game:
                     # Game Over
                     print("Game Over!")
                     self.running = False
+
         
         
     
