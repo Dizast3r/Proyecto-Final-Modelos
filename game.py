@@ -10,6 +10,8 @@ DEFAULT_SPEED = 5
 DEFAULT_JUMP_POWER = 15
 DEFAULT_GRAVITY = 0.8
 DEFAULT_LIVES = 3
+MAX_SPEED = 30
+MAX_JUMP_POWER = 28
 
 class Player:
     """Clase del jugador que puede guardar y restaurar su estado"""
@@ -121,6 +123,20 @@ class Player:
         """El jugador muere"""
         self.lives -= 1
         return self.lives > 0
+    
+    def get_life(self):
+        self.lives += 1
+
+    def increase_speed(self, speed_increase):
+        new_speed = self.speed + speed_increase
+        if new_speed <= MAX_SPEED:
+            self.speed = new_speed
+    
+    def increse_jump_power(self, jump_power_increase):
+        new_jump_power = self.jump_power + jump_power_increase
+        if new_jump_power <= MAX_JUMP_POWER:
+            self.jump_power = new_jump_power
+        
 
 
 class Platform:
@@ -296,9 +312,6 @@ class Game:
                     print("Game Over!")
                     self.running = False
 
-        
-        
-    
     def draw(self):
         """Dibuja todos los elementos del juego"""
         # Fondo (cielo)
