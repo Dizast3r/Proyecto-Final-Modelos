@@ -6,12 +6,12 @@ Permite guardar el estado del jugador y restaurarlo cuando sea necesario
 class PlayerMemento:
     """Memento que guarda el estado del jugador"""
     
-    def __init__(self, x, y, velocity_x, velocity_y, lives):
+    def __init__(self, x, y):
         self._x = x
         self._y = y
-        self._velocity_x = velocity_x
-        self._velocity_y = velocity_y
-        self._lives = lives
+        self._velocity_x = 0
+        self._velocity_y = 0
+
     
     def get_state(self):
         """Retorna el estado guardado"""
@@ -19,8 +19,7 @@ class PlayerMemento:
             'x': self._x,
             'y': self._y,
             'velocity_x': self._velocity_x,
-            'velocity_y': self._velocity_y,
-            'lives': self._lives
+            'velocity_y': self._velocity_y
         }
 
 
@@ -42,10 +41,10 @@ class CheckpointManager:
         return self._checkpoints.get(checkpoint_id)
     
     def get_last_checkpoint(self):
-        """Recupera el último checkpoint guardado"""
-        if self._current_checkpoint:
+        if self._current_checkpoint is not None:  # ← Correcto
             return self._checkpoints.get(self._current_checkpoint)
         return None
+
     
     def has_checkpoints(self):
         """Verifica si hay checkpoints guardados"""

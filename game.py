@@ -95,8 +95,7 @@ class Player:
     
     def create_memento(self):
         """Crea un memento con el estado actual"""
-        return PlayerMemento(self.x, self.y, self.velocity_x, 
-                           self.velocity_y, self.lives)
+        return PlayerMemento(self.x, self.y)
     
     def restore_from_memento(self, memento):
         """Restaura el estado desde un memento"""
@@ -106,7 +105,6 @@ class Player:
             self.y = state['y']
             self.velocity_x = state['velocity_x']
             self.velocity_y = state['velocity_y']
-            self.lives = state['lives']
     
     def get_rect(self):
         """Retorna el rectángulo de colisión"""
@@ -263,6 +261,15 @@ class Game:
     def check_collisions(self):
         """Verifica colisiones con espinas y checkpoints"""
         player_rect = self.player.get_rect()
+
+        # Colisión con checkpoints
+        for checkpoint in self.checkpoints:
+            if player_rect.colliderect(checkpoint.get_rect()):
+                if not checkpoint.activated:
+                    checkpoint.activate()
+                    memento = self.player.create_memento()
+                    self.checkpoint_manager.save_checkpoint(
+                        checkpoint.checkpoint_id, memento)
         
         # Colisión con espinas
         for spike in self.spikes:
@@ -273,22 +280,16 @@ class Game:
                     if memento:
                         self.player.restore_from_memento(memento)
                     else:
-                        # Volver al inicio
-                        self.player = Player(100, 100)
-                        self.player.lives = 3
+                        self.player.x = 100
+                        self.player.y = 100
+                        self.player.velocity_x = 0
+                        self.player.velocity_y = 0
                 else:
                     # Game Over
                     print("Game Over!")
                     self.running = False
         
-        # Colisión con checkpoints
-        for checkpoint in self.checkpoints:
-            if player_rect.colliderect(checkpoint.get_rect()):
-                if not checkpoint.activated:
-                    checkpoint.activate()
-                    memento = self.player.create_memento()
-                    self.checkpoint_manager.save_checkpoint(
-                        checkpoint.checkpoint_id, memento)
+        
     
     def draw(self):
         """Dibuja todos los elementos del juego"""
