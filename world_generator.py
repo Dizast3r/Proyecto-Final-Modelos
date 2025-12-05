@@ -7,6 +7,9 @@ permitiendo que las subclases implementen pasos específicos
 from abc import ABC, abstractmethod
 import random
 
+SPACE_BETWEEN_CHECKPOINTS = 800
+NUMBER_OF_CHECKPOINTS_PER_LEVEL = 3
+
 class WorldGenerator(ABC):
     """Clase abstracta que define el template method para generar mundos"""
     
@@ -54,13 +57,12 @@ class WorldGenerator(ABC):
     def generate_hazards(self, width, height):
         """Genera los obstáculos/trampas del mundo"""
         pass
-    
+
     def generate_checkpoints(self, width, height):
         """Genera checkpoints (implementación por defecto)"""
         checkpoints = []
-        # Checkpoint cada 400 pixels
-        for i in range(1, 5):
-            checkpoints.append({'x': i * 400, 'y': height - 150})
+        for i in range(1, NUMBER_OF_CHECKPOINTS_PER_LEVEL + 1):
+            checkpoints.append({'x': i * SPACE_BETWEEN_CHECKPOINTS, 'y': height - 150})
         return checkpoints
     
     def add_special_features(self, world_data, width, height):

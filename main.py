@@ -7,9 +7,13 @@ import pygame
 from game import Game
 from world_generator import GrassWorldGenerator, DesertWorldGenerator, IceWorldGenerator
 
+ANCHO_DEL_MUNDO = 3000
+ANCHO_VENTANA = 1600
+ALTO_VENTANA = 600
+
 def main():
     # Crear el juego
-    game = Game(width=1600, height=600)
+    game = Game(ANCHO_DEL_MUNDO, ALTO_VENTANA, ANCHO_DEL_MUNDO)
     
     # Crear generadores de mundos (Template Method Pattern)
     grass_generator = GrassWorldGenerator()

@@ -315,11 +315,11 @@ class PowerExtraLife(PowerUP):
         player.get_life()
         
 
-ANCHO_DEL_MUNDO = 3000
+
 class Game:
     """Clase principal del juego"""
     
-    def __init__(self, width=1600, height=600):
+    def __init__(self, width=1600, height=600, world_width = 3000):
         pygame.init()
         self.width = width
         self.height = height
@@ -345,7 +345,7 @@ class Game:
 
         # NUEVO: Sistema de cámara
         self.camera_x = 0
-        self.world_width = ANCHO_DEL_MUNDO
+        self.world_width = world_width
         
         # Fuente para texto
         self.font = pygame.font.Font(None, 36)
