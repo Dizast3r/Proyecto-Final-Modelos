@@ -5,6 +5,7 @@ Clases principales del juego
 import pygame
 from memento import PlayerMemento, CheckpointManager
 from commands import InputHandler
+from abc import ABC, abstractmethod
 
 DEFAULT_SPEED = 5
 DEFAULT_JUMP_POWER = 15
@@ -220,6 +221,44 @@ class Checkpoint:
         """Activa el checkpoint"""
         self.activated = True
 
+class PowerUP(ABC):
+    def __init__(self, x, y, width, height, color):
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+
+    @abstractmethod
+    def draw(self, screen):
+        pass
+    
+    @abstractmethod
+    def power(player):
+        pass
+
+DEFAULT_SPEED_INCREASE = 3
+class PowerSpeedIncrease(PowerUP):
+    def draw(self, screen):
+        pass
+
+    def power(player):
+        player.speed_increase(DEFAULT_SPEED_INCREASE)
+
+DEFAULT_JUMP_POWER_INCREASE = 2
+class PowerJumpPowerIncrease(PowerUP):
+    def draw(self, screen):
+        pass
+
+    def power(player):
+        player.increase_jump_power(DEFAULT_JUMP_POWER_INCREASE)
+
+class PowerExtraLife(PowerUP):
+    def draw(self, screen):
+        pass
+
+    def power(player):
+        player.get_life()
+        
 
 class Game:
     """Clase principal del juego"""
