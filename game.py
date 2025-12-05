@@ -371,34 +371,6 @@ class Enemy:
         
         # Verificar obstáculos adelante
         self.check_obstacles(spikes, checkpoints, goal)
-        
-        # Cambiar dirección en bordes de plataformas
-        if self.on_ground:
-            # Detectar si está por caerse del borde
-            if not self.facing_right:  # Mirando izquierda
-                feet_x = self.x - 5
-            else:  # Mirando derecha
-                feet_x = self.x + self.width + 5
-            
-            feet_rect = pygame.Rect(
-                feet_x,
-                self.y + self.height + 5,
-                10,
-                10
-            )
-            
-            on_platform = False
-            for platform in platforms:
-                platform_rect = pygame.Rect(
-                    platform['x'], platform['y'],
-                    platform['width'], platform['height']
-                )
-                if feet_rect.colliderect(platform_rect):
-                    on_platform = True
-                    break
-            
-            if not on_platform:
-                self.change_direction()
     
     def draw(self, screen, camera_x):
         """Dibuja el enemigo"""
@@ -670,6 +642,7 @@ class Game:
         self.current_world = None
         self.platforms = []
         self.spikes = []
+        self.enemies = []
         self.checkpoints = []
         self.colors = {}
         self.world_name = ""
@@ -725,6 +698,11 @@ class Game:
         else:
             self.goal = None
         
+        self.enemies = []
+        for e in world_data.get('enemies', []):
+            enemy = Enemy(e['x'], e['y'])
+            self.enemies.append(enemy)
+        
         # Resetear jugador
         self.player = Player(100, 100)
         self.checkpoint_manager.clear_checkpoints()
@@ -747,6 +725,41 @@ class Game:
             if player_rect.colliderect(self.goal.get_rect()):
                 self.goal.activate()
                 print(f"\n🎉 ¡META ALCANZADA! Completaste {self.world_name}")
+
+        for enemy in self.enemies:
+            if not enemy.alive:
+                continue  # Ignorar enemigos muertos
+            
+            enemy_rect = enemy.get_rect()
+            
+            if player_rect.colliderect(enemy_rect):
+                # Determinar tipo de colisión
+                player_bottom = self.player.y + self.player.height
+                enemy_top = enemy.y
+                
+                # Si el jugador viene desde arriba (aplastando)
+                if self.player.velocity_y > 0 and player_bottom < enemy_top + 15:
+                    # Jugador aplasta al enemigo
+                    enemy.die()
+                    # Pequeño rebote del jugador
+                    self.player.velocity_y = -10
+                    print("💥 ¡Enemigo aplastado!")
+                else:
+                    # Colisión frontal - el enemigo mata al jugador
+                    if self.player.die():
+                        # Restaurar desde último checkpoint
+                        memento = self.checkpoint_manager.get_last_checkpoint()
+                        if memento:
+                            self.player.restore_from_memento(memento)
+                        else:
+                            self.player.x = 100
+                            self.player.y = 100
+                            self.player.velocity_x = 0
+                            self.player.velocity_y = 0
+                    elif self.running:
+                        # Game Over
+                        print("Game Over!")
+                        self.running = False
         
         # Colisión con espinas
         for spike in self.spikes:
@@ -782,6 +795,9 @@ class Game:
         # Dibujar checkpoints CON cámara
         for checkpoint in self.checkpoints:
             checkpoint.draw(self.screen, self.camera_x)
+        
+        for enemy in self.enemies:
+            enemy.draw(self.screen, self.camera_x)
         
         # Dibujar goal CON cámara
         if self.goal:
@@ -823,6 +839,11 @@ class Game:
         platform_data = [{'x': p.x, 'y': p.y, 'width': p.width, 
                          'height': p.height} for p in self.platforms]
         self.player.update(platform_data)
+        for enemy in self.enemies:
+            enemy.update(platform_data, self.spikes, self.checkpoints, self.goal)
+        
+        #Eliminar enemigos muertos (después de 2 segundos)
+        self.enemies = [enemy for enemy in self.enemies if not enemy.should_be_removed()]
         self.check_collisions()
         self.update_camera()
     
