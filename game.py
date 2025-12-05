@@ -128,22 +128,24 @@ class Player:
                 self.current_sprite = 0
                 self.animation_counter = 0
     
-    def draw(self, screen):
+    def draw(self, screen, camera_x):
         """Dibuja el jugador"""
+        screen_x = self.x - camera_x
+
         if self.image:
             img = self.image
             if not self.facing_right:  # Voltear si mira a la izquierda
                 img = pygame.transform.flip(self.image, True, False)
-            screen.blit(img, (self.x, self.y))
+            screen.blit(img, (screen_x, self.y))
         else:
             # Dibujar rectángulo temporal (aquí irá tu sprite)
             pygame.draw.rect(screen, (255, 0, 0), 
-                           (self.x, self.y, self.width, self.height))
+                           (screen_x, self.y, self.width, self.height))
             # Cara simple
             pygame.draw.circle(screen, (255, 255, 255), 
-                             (int(self.x + 15), int(self.y + 20)), 3)
+                             (int(screen_x + 15), int(self.y + 20)), 3)
             pygame.draw.circle(screen, (255, 255, 255), 
-                             (int(self.x + 25), int(self.y + 20)), 3)
+                             (int(screen_x + 25), int(self.y + 20)), 3)
             
     
     def create_memento(self):
@@ -196,14 +198,16 @@ class Platform:
         self.height = height
         self.color = color
     
-    def draw(self, screen):
+    def draw(self, screen, camera_x):
         """Dibuja la plataforma"""
-        pygame.draw.rect(screen, self.color, 
-                        (self.x, self.y, self.width, self.height))
+        screen_x = self.x - camera_x  # ← NUEVA LÍNEA
+    
+        pygame.draw.rect(screen, self.color,
+                    (screen_x, self.y, self.width, self.height))
         # Borde para efecto 3D
-        pygame.draw.rect(screen, 
-                        tuple(max(0, c - 30) for c in self.color),
-                        (self.x, self.y, self.width, self.height), 3)
+        pygame.draw.rect(screen,
+                    tuple(max(0, c - 30) for c in self.color),
+                    (screen_x, self.y, self.width, self.height), 3)
 
 
 class Spike:
@@ -216,13 +220,16 @@ class Spike:
         self.height = height
         self.color = color
     
-    def draw(self, screen):
+    def draw(self, screen, camera_x):  # ← Añadir parámetro
         """Dibuja la espina como un triángulo"""
+        screen_x = self.x - camera_x  # ← NUEVA LÍNEA
+        
         points = [
-            (self.x + self.width // 2, self.y),  # Punta superior
-            (self.x, self.y + self.height),      # Esquina inferior izquierda
-            (self.x + self.width, self.y + self.height)  # Esquina inferior derecha
+            (screen_x + self.width // 2, self.y),  # ← Usar screen_x
+            (screen_x, self.y + self.height),  # ← Usar screen_x
+            (screen_x + self.width, self.y + self.height)  # ← Usar screen_x
         ]
+        
         pygame.draw.polygon(screen, self.color, points)
         pygame.draw.polygon(screen, (0, 0, 0), points, 2)
     
@@ -243,20 +250,22 @@ class Checkpoint:
         self.activated = False
         self.color = (255, 215, 0)  # Dorado
     
-    def draw(self, screen):
+    def draw(self, screen, camera_x):  # ← Añadir parámetro
         """Dibuja el checkpoint"""
+        screen_x = self.x - camera_x  # ← NUEVA LÍNEA
+        
         if self.activated:
             color = (0, 255, 0)  # Verde cuando está activado
         else:
             color = self.color
         
         # Bandera
-        pygame.draw.rect(screen, (100, 100, 100), 
-                        (self.x, self.y, 5, self.height))
+        pygame.draw.rect(screen, (100, 100, 100),
+                    (screen_x, self.y, 5, self.height))  # ← Usar screen_x
         pygame.draw.polygon(screen, color, [
-            (self.x + 5, self.y),
-            (self.x + self.width, self.y + 15),
-            (self.x + 5, self.y + 30)
+            (screen_x + 5, self.y),  # ← Usar screen_x
+            (screen_x + self.width, self.y + 15),  # ← Usar screen_x
+            (screen_x + 5, self.y + 30)  # ← Usar screen_x
         ])
     
     def get_rect(self):
@@ -306,6 +315,7 @@ class PowerExtraLife(PowerUP):
         player.get_life()
         
 
+ANCHO_DEL_MUNDO = 3000
 class Game:
     """Clase principal del juego"""
     
@@ -314,7 +324,7 @@ class Game:
         self.width = width
         self.height = height
         self.screen = pygame.display.set_mode((width, height))
-        pygame.display.set_caption("Mario Jump Game - Patrones de Diseño")
+        pygame.display.set_caption("Super Kirby Bro - Proyecto Final")
         self.clock = pygame.time.Clock()
         self.running = True
         
@@ -332,11 +342,26 @@ class Game:
         self.checkpoints = []
         self.colors = {}
         self.world_name = ""
+
+        # NUEVO: Sistema de cámara
+        self.camera_x = 0
+        self.world_width = ANCHO_DEL_MUNDO
         
         # Fuente para texto
         self.font = pygame.font.Font(None, 36)
         self.small_font = pygame.font.Font(None, 24)
-    
+
+    def update_camera(self):
+        """Actualiza la posición de la cámara siguiendo al jugador (centrado)"""
+        # Centrar cámara en el jugador
+        self.camera_x = self.player.x - self.width // 2
+        
+        # Limitar la cámara para que no salga de los bordes del mundo
+        if self.camera_x < 0:
+            self.camera_x = 0
+        elif self.camera_x > self.world_width - self.width:
+            self.camera_x = self.world_width - self.width
+        
     def load_world(self, world_data):
         """Carga un mundo generado"""
         self.colors = world_data['colors']
@@ -402,20 +427,20 @@ class Game:
         # Fondo (cielo)
         self.screen.fill(self.colors.get('sky', (135, 206, 235)))
         
-        # Dibujar plataformas
+        # Dibujar plataformas CON cámara
         for platform in self.platforms:
-            platform.draw(self.screen)
+            platform.draw(self.screen, self.camera_x)  # ← Pasar camera_x
         
-        # Dibujar espinas
+        # Dibujar espinas CON cámara
         for spike in self.spikes:
-            spike.draw(self.screen)
+            spike.draw(self.screen, self.camera_x)  # ← Pasar camera_x
         
-        # Dibujar checkpoints
+        # Dibujar checkpoints CON cámara
         for checkpoint in self.checkpoints:
-            checkpoint.draw(self.screen)
+            checkpoint.draw(self.screen, self.camera_x)  # ← Pasar camera_x
         
-        # Dibujar jugador
-        self.player.draw(self.screen)
+        # Dibujar jugador CON cámara
+        self.player.draw(self.screen, self.camera_x)  # ← Pasar camera_x
         
         # Dibujar UI
         self.draw_ui()
@@ -450,6 +475,7 @@ class Game:
                          'height': p.height} for p in self.platforms]
         self.player.update(platform_data)
         self.check_collisions()
+        self.update_camera()
     
     def run(self):
         """Loop principal del juego"""
