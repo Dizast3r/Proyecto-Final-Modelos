@@ -10,6 +10,12 @@ import random
 SPACE_BETWEEN_CHECKPOINTS = 800
 NUMBER_OF_CHECKPOINTS_PER_LEVEL = 3
 WORLD_MUSIC_PATH = 'Assets/WorldMusic/'
+MAX_JUMP_DISTANCE = 250  # Distancia horizontal máxima de salto para calculo en plataformas
+MAX_JUMP_HEIGHT = 130    # Altura máxima de salto para calculo en plataformas
+CHECKPOINT_SAFE_RADIUS = 250  # Radio de exclusión alrededor de checkpoints
+MIN_VERTICAL_SPACING = 80  # Espacio mínimo vertical entre plataformas cercanas
+MIN_HORIZONTAL_SPACING = 100  # Espacio mínimo horizontal si están en alturas similares
+
 
 class WorldGenerator(ABC):
     """Clase abstracta que define el template method para generar mundos"""
@@ -34,17 +40,65 @@ class WorldGenerator(ABC):
         # Pasos del algoritmo en orden
         world_data['colors'] = self.define_colors()
         world_data['name'] = self.get_world_name()
-        world_data['platforms'] = self.generate_platforms(width, height)
-        world_data['spikes'] = self.generate_hazards(width, height)
-        world_data['checkpoints'] = self.generate_checkpoints(width, height)
+        world_data['checkpoints'] = self.generate_checkpoints(width, height)  # PRIMERO
+        world_data['platforms'] = self.generate_platforms(width, height, world_data['checkpoints'])  # Pasa checkpoints
+        world_data['spikes'] = self.generate_hazards(width, height, world_data['platforms'], world_data['checkpoints'])  # Pasa ambos
         world_data['powerups'] = self.add_powerups(width, height)
-        world_data['enemies'] = self.add_enemies(width, height)      
-        world_data['goal'] = self.add_goal(width, height)        
+        world_data['enemies'] = self.add_enemies(width, height)
+        world_data['goal'] = self.add_goal(width, height)
         
-        # Hook method para características especiales
         self.add_special_features(world_data, width, height)
         
         return world_data
+    
+    def rectangles_overlap(self, x1, y1, w1, h1, x2, y2, w2, h2):
+        """Verifica si dos rectángulos se superponen"""
+        return not (x1 + w1 < x2 or x2 + w2 < x1 or y1 + h1 < y2 or y2 + h2 < y1)
+    
+    def is_near_checkpoint(self, x, y, checkpoints, radius=None):
+        """Verifica si una posición está cerca de algún checkpoint"""
+        if radius is None:
+            radius = CHECKPOINT_SAFE_RADIUS
+        
+        for checkpoint in checkpoints:
+            distance = ((x - checkpoint['x']) ** 2 + (y - checkpoint['y']) ** 2) ** 0.5
+            if distance < radius:
+                return True
+        return False
+    
+    def is_platform_reachable(self, from_x, from_y, to_x, to_y, to_width):
+        """Verifica si una plataforma es alcanzable desde otra posición"""
+        # Distancia horizontal
+        horizontal_dist = abs(to_x - from_x)
+        if horizontal_dist > MAX_JUMP_DISTANCE:
+            return False
+        
+        # Diferencia de altura (negativo = subir, positivo = bajar)
+        vertical_dist = from_y - to_y
+        
+        # Si está más alto, verificar que no exceda altura de salto
+        if vertical_dist < 0 and abs(vertical_dist) > MAX_JUMP_HEIGHT:
+            return False
+        
+        return True
+    
+    def is_on_surface(self, spike_x, spike_y, spike_width, platforms, ground_y):
+        """Verifica si una espina está sobre una superficie (suelo o plataforma)"""
+        spike_bottom = spike_y + spike_width  # Asumiendo espinas cuadradas/triangulares
+        
+        # Verificar si está en el suelo
+        if abs(spike_bottom - ground_y) < 5:
+            return True
+        
+        # Verificar si está sobre alguna plataforma
+        for platform in platforms:
+            # La espina debe estar "sobre" la plataforma
+            if abs(spike_bottom - platform['y']) < 5:
+                # Y debe estar dentro del rango horizontal de la plataforma
+                if spike_x >= platform['x'] and spike_x <= platform['x'] + platform['width']:
+                    return True
+        
+        return False
     
     @abstractmethod
     def define_colors(self):
@@ -57,13 +111,13 @@ class WorldGenerator(ABC):
         pass
     
     @abstractmethod
-    def generate_platforms(self, width, height):
-        """Genera las plataformas del mundo"""
+    def generate_platforms(self, width, height, checkpoints):
+        """Genera las plataformas evitando checkpoints"""
         pass
     
     @abstractmethod
-    def generate_hazards(self, width, height):
-        """Genera los obstáculos/trampas del mundo"""
+    def generate_hazards(self, width, height, platforms, checkpoints):
+        """Genera espinas evitando checkpoints y validando superficies"""
         pass
     
     def generate_checkpoints(self, width, height):
@@ -111,154 +165,406 @@ class GrassWorldGenerator(WorldGenerator):
         """Nombre del mundo"""
         return "Mundo de Pasto"
     
-    def generate_platforms(self, width, height):
-        """Genera plataformas distribuidas responsivamente"""
+    def generate_platforms(self, width, height, checkpoints):
+        """Genera plataformas con espaciamiento riguroso y sin amontonamiento"""
         platforms = []
         
-        # 1. SUELO PRINCIPAL - Cubre todo el ancho del mundo
-        platforms.append({
-            'x': 0, 
-            'y': height - 50, 
-            'width': width,      # Responsivo: usa el ancho completo
+        # 1. SUELO PRINCIPAL
+        ground = {
+            'x': 0,
+            'y': height - 50,
+            'width': width,
             'height': 50
-        })
+        }
+        platforms.append(ground)
         
-        # 2. PLATAFORMAS DE INICIO (zona segura) - Fijas
-        # Estas siempre están para que el jugador tenga dónde empezar
-        platforms.append({
-            'x': 150, 
-            'y': height - 150, 
-            'width': 150, 
-            'height': 20
-        })
-        platforms.append({
-            'x': 350, 
-            'y': height - 200, 
-            'width': 130, 
-            'height': 20
-        })
+        # 2. PLATAFORMAS DE INICIO - Bien espaciadas
+        spawn_x = 100
+        spawn_y = 100
         
-        # 3. PLATAFORMAS DISTRIBUIDAS - Responsivo y aleatorio
-        # Dividir el mundo en segmentos después de la zona de inicio
-        start_generation = 600  # Empezar después de zona inicial
-        end_generation = width - 400  # Terminar antes de zona final
+        first_platform = {
+            'x': 150,
+            'y': height - 150,
+            'width': 150,
+            'height': 20
+        }
+        
+        if self.is_platform_reachable(spawn_x, spawn_y, first_platform['x'], first_platform['y'], first_platform['width']):
+            platforms.append(first_platform)
+        
+        second_platform = {
+            'x': 350,
+            'y': height - 220,  # Más espaciada verticalmente (220 vs 200)
+            'width': 130,
+            'height': 20
+        }
+        
+        if self.is_platform_reachable(first_platform['x'], first_platform['y'], second_platform['x'], second_platform['y'], second_platform['width']):
+            platforms.append(second_platform)
+        
+        # 3. PLATAFORMAS DISTRIBUIDAS - Con espaciamiento estricto
+        start_generation = 600
+        end_generation = width - 400
         generation_width = end_generation - start_generation
         
-        num_segments = 6  # 6 zonas de generación
+        num_segments = 6
         segment_width = generation_width // num_segments
         
         for segment in range(num_segments):
-            # Calcular límites de este segmento
             segment_start = start_generation + (segment * segment_width)
             segment_end = segment_start + segment_width
             
-            # 2-3 plataformas por segmento (nivel fácil = muchas)
-            num_platforms = random.randint(2, 3)
+            # NUEVO: Máximo 3 plataformas por segmento (antes 2-3)
+            num_platforms = random.randint(1, 3)
+            attempts_per_segment = 0
+            platforms_added_in_segment = 0
             
-            for i in range(num_platforms):
-                # Posición X aleatoria dentro del segmento
+            # Guardar plataformas de este segmento para validar espaciamiento
+            segment_platforms = []
+            
+            while platforms_added_in_segment < num_platforms and attempts_per_segment < 20:
+                attempts_per_segment += 1
+                
+                margin_left = int(segment_width * 0.10)
+                margin_right = int(segment_width * 0.15)
+                
+                available_width = segment_width - margin_left - margin_right
+                if available_width < 100:
+                    break
+                
+                # Generar posición candidata
                 x = random.randint(
-                    segment_start + 80,   # Margen desde inicio segmento
-                    segment_end - 180     # Margen antes de fin segmento
+                    segment_start + margin_left,
+                    segment_end - margin_right
                 )
                 
-                # Altura Y aleatoria pero controlada (fácil = no muy alto)
                 y = random.randint(
-                    height - 280,  # Altura máxima (280px del suelo)
-                    height - 130   # Altura mínima (130px del suelo)
+                    height - 280,
+                    height - 130
                 )
                 
-                # Ancho de plataforma (fácil = plataformas grandes)
                 platform_width = random.randint(130, 180)
+                platform_height = 20
                 
-                platforms.append({
-                    'x': x, 
-                    'y': y, 
-                    'width': platform_width, 
-                    'height': 20
-                })
+                # === VALIDACIÓN 1: No cerca de checkpoints ===
+                if self.is_near_checkpoint(x, y, checkpoints):
+                    continue
+                
+                # === VALIDACIÓN 2: No superpuesta con NINGUNA plataforma ===
+                overlaps = False
+                for existing_platform in platforms:
+                    if self.rectangles_overlap(
+                        x, y, platform_width, platform_height,
+                        existing_platform['x'], existing_platform['y'],
+                        existing_platform['width'], existing_platform['height']
+                    ):
+                        overlaps = True
+                        break
+                
+                if overlaps:
+                    continue
+                
+                # === VALIDACIÓN 3: Espaciamiento vertical y horizontal adecuado ===
+                # Verificar con todas las plataformas existentes
+                too_close = False
+                
+                for existing_platform in platforms:
+                    # Calcular distancias
+                    horizontal_distance = abs(x - existing_platform['x'])
+                    vertical_distance = abs(y - existing_platform['y'])
+                    
+                    # Si están horizontalmente cercanas (en la misma "columna")
+                    if horizontal_distance < 200:
+                        # Deben estar bien separadas verticalmente
+                        if vertical_distance < MIN_VERTICAL_SPACING:
+                            too_close = True
+                            break
+                    
+                    # Si están a altura similar (en la misma "fila")
+                    if vertical_distance < 40:
+                        # Deben estar bien separadas horizontalmente
+                        if horizontal_distance < MIN_HORIZONTAL_SPACING:
+                            too_close = True
+                            break
+                
+                if too_close:
+                    continue
+                
+                # === VALIDACIÓN 4: Alcanzable desde alguna plataforma o suelo ===
+                is_reachable = False
+                
+                # Desde el suelo
+                if self.is_platform_reachable(x, height - 50, x, y, platform_width):
+                    is_reachable = True
+                
+                # Desde plataforma previa
+                if not is_reachable:
+                    for prev_platform in platforms:
+                        # Solo considerar plataformas razonablemente cercanas
+                        if prev_platform['x'] < x + 350:
+                            if self.is_platform_reachable(
+                                prev_platform['x'] + prev_platform['width'],
+                                prev_platform['y'],
+                                x,
+                                y,
+                                platform_width
+                            ):
+                                is_reachable = True
+                                break
+                
+                # ALTERNATIVA: También verificar si es alcanzable desde plataformas a la derecha
+                # (para casos donde saltas hacia atrás)
+                if not is_reachable:
+                    for prev_platform in platforms:
+                        if prev_platform['x'] > x - 350 and prev_platform['x'] < x + segment_width:
+                            if self.is_platform_reachable(
+                                prev_platform['x'],
+                                prev_platform['y'],
+                                x,
+                                y,
+                                platform_width
+                            ):
+                                is_reachable = True
+                                break
+                
+                if not is_reachable:
+                    continue
+                
+                # === TODAS LAS VALIDACIONES PASADAS ===
+                new_platform = {
+                    'x': x,
+                    'y': y,
+                    'width': platform_width,
+                    'height': platform_height
+                }
+                
+                platforms.append(new_platform)
+                segment_platforms.append(new_platform)
+                platforms_added_in_segment += 1
         
-        # 4. PLATAFORMAS FINALES (zona de meta) - Fijas
-        # Ayudan a llegar a la meta
-        platforms.append({
-            'x': width - 400, 
-            'y': height - 170, 
-            'width': 150, 
+        # 4. PLATAFORMAS FINALES - Validadas y espaciadas
+        final_platform_1 = {
+            'x': width - 400,
+            'y': height - 170,
+            'width': 150,
             'height': 20
-        })
-        platforms.append({
-            'x': width - 220, 
-            'y': height - 140, 
-            'width': 120, 
+        }
+        
+        # Validar checkpoint y espaciamiento
+        if not self.is_near_checkpoint(final_platform_1['x'], final_platform_1['y'], checkpoints):
+            # Validar espaciamiento con otras plataformas
+            can_add = True
+            for existing_platform in platforms:
+                horizontal_distance = abs(final_platform_1['x'] - existing_platform['x'])
+                vertical_distance = abs(final_platform_1['y'] - existing_platform['y'])
+                
+                if horizontal_distance < 200 and vertical_distance < MIN_VERTICAL_SPACING:
+                    can_add = False
+                    break
+            
+            if can_add:
+                platforms.append(final_platform_1)
+        
+        final_platform_2 = {
+            'x': width - 220,
+            'y': height - 140,
+            'width': 120,
             'height': 20
-        })
+        }
+        
+        if not self.is_near_checkpoint(final_platform_2['x'], final_platform_2['y'], checkpoints):
+            can_add = True
+            for existing_platform in platforms:
+                horizontal_distance = abs(final_platform_2['x'] - existing_platform['x'])
+                vertical_distance = abs(final_platform_2['y'] - existing_platform['y'])
+                
+                if horizontal_distance < 200 and vertical_distance < MIN_VERTICAL_SPACING:
+                    can_add = False
+                    break
+            
+            if can_add:
+                platforms.append(final_platform_2)
         
         return platforms
+
+
     
-    def generate_hazards(self, width, height):
-        """Genera espinas distribuidas con aleatoriedad"""
+    def generate_hazards(self, width, height, platforms, checkpoints):
+        """Genera espinas con validaciones rigurosas"""
         spikes = []
+        ground_y = height - 50  # Altura del suelo
         
         # 1. ZONA SEGURA DE INICIO - Sin espinas
         safe_zone = 500
         
         # 2. ZONA DE GENERACIÓN
         start_generation = safe_zone
-        end_generation = width - 300  # No poner espinas muy cerca de la meta
+        end_generation = width - 300
         generation_width = end_generation - start_generation
         
-        # 3. DIVIDIR EN ZONAS PARA DISTRIBUIR ESPINAS
+        # 3. DIVIDIR EN ZONAS
         num_zones = 10
         zone_width = generation_width // num_zones
         
-        # 4. ESPINAS INDIVIDUALES ALEATORIAS
+        # 4. ESPINAS INDIVIDUALES CON VALIDACIONES
         for zone in range(num_zones):
             zone_start = start_generation + (zone * zone_width)
             zone_end = zone_start + zone_width
             
-            # 25% probabilidad de espina en esta zona (fácil = pocas)
+            # 25% probabilidad base
             if random.random() < 0.25:
-                x = random.randint(zone_start + 40, zone_end - 40)
+                attempts = 0
+                spike_placed = False
                 
-                spikes.append({
-                    'x': x, 
-                    'y': height - 80,  # En el suelo
-                    'width': 40, 
-                    'height': 30
-                })
+                while not spike_placed and attempts < 5:
+                    attempts += 1
+                    
+                    # Generar posición candidata
+                    x = random.randint(zone_start + 40, zone_end - 40)
+                    y = ground_y - 30  # En el suelo (altura de espina = 30)
+                    spike_width = 40
+                    spike_height = 30
+                    
+                    # === VALIDACIÓN 1: No cerca de checkpoints ===
+                    if self.is_near_checkpoint(x, y, checkpoints, radius=150):
+                        continue  # Demasiado cerca de checkpoint
+                    
+                    # === VALIDACIÓN 2: Debe estar sobre una superficie ===
+                    if not self.is_on_surface(x, y, spike_height, platforms, ground_y):
+                        continue  # No está sobre suelo ni plataforma
+                    
+                    # === VALIDACIÓN 3: No superpuesta con otra espina ===
+                    overlaps = False
+                    for existing_spike in spikes:
+                        if self.rectangles_overlap(
+                            x, y, spike_width, spike_height,
+                            existing_spike['x'], existing_spike['y'],
+                            existing_spike['width'], existing_spike['height']
+                        ):
+                            overlaps = True
+                            break
+                    
+                    if overlaps:
+                        continue  # Se superpone con otra espina
+                    
+                    # === TODAS LAS VALIDACIONES PASADAS ===
+                    spikes.append({
+                        'x': x,
+                        'y': y,
+                        'width': spike_width,
+                        'height': spike_height
+                    })
+                    spike_placed = True
         
-        # 5. ZONAS DE PELIGRO (grupos de espinas)
-        # Seleccionar 2 zonas aleatorias para poner múltiples espinas
+        # 5. ZONAS DE PELIGRO (grupos de espinas) CON VALIDACIONES
         if num_zones >= 3:
             danger_zones = random.sample(range(2, num_zones - 1), min(2, num_zones - 3))
             
             for danger_zone in danger_zones:
                 zone_start = start_generation + (danger_zone * zone_width)
                 
-                # 2-3 espinas juntas en esta zona
+                # Verificar que esta zona no está cerca de checkpoints
+                zone_center_x = zone_start + zone_width // 2
+                zone_center_y = ground_y - 30
+                
+                if self.is_near_checkpoint(zone_center_x, zone_center_y, checkpoints, radius=200):
+                    continue  # Esta zona está cerca de un checkpoint, saltarla
+                
                 num_spikes_in_danger = random.randint(2, 3)
+                spikes_added = 0
                 
                 for i in range(num_spikes_in_danger):
+                    x = zone_start + (i * 55) + 50
+                    y = ground_y - 30
+                    spike_width = 40
+                    spike_height = 30
+                    
+                    # === VALIDACIÓN 1: No cerca de checkpoints (individual) ===
+                    if self.is_near_checkpoint(x, y, checkpoints, radius=150):
+                        continue
+                    
+                    # === VALIDACIÓN 2: Sobre superficie ===
+                    if not self.is_on_surface(x, y, spike_height, platforms, ground_y):
+                        continue
+                    
+                    # === VALIDACIÓN 3: No superpuesta ===
+                    overlaps = False
+                    for existing_spike in spikes:
+                        if self.rectangles_overlap(
+                            x, y, spike_width, spike_height,
+                            existing_spike['x'], existing_spike['y'],
+                            existing_spike['width'], existing_spike['height']
+                        ):
+                            overlaps = True
+                            break
+                    
+                    if overlaps:
+                        continue
+                    
+                    # Añadir espina del grupo
                     spikes.append({
-                        'x': zone_start + (i * 55) + 50,
-                        'y': height - 80,
-                        'width': 40,
-                        'height': 30
+                        'x': zone_start + (spikes_added * 55) + 50,
+                        'y': ground_y - 30,
+                        'width': spike_width,
+                        'height': spike_height
+                    })
+                    spikes_added += 1
+        
+        # 6. ESPINAS EN PLATAFORMAS (opcional para nivel fácil)
+        # Seleccionar algunas plataformas al azar para poner espinas encima
+        eligible_platforms = []
+        
+        for platform in platforms:
+            # Solo plataformas que no sean el suelo y no estén cerca de checkpoints
+            if platform['y'] < height - 100:  # No es el suelo
+                if not self.is_near_checkpoint(platform['x'], platform['y'], checkpoints, radius=200):
+                    eligible_platforms.append(platform)
+        
+        # En nivel fácil, solo 1-2 espinas en plataformas
+        num_platform_spikes = min(random.randint(0, 2), len(eligible_platforms))
+        
+        if num_platform_spikes > 0:
+            selected_platforms = random.sample(eligible_platforms, num_platform_spikes)
+            
+            for platform in selected_platforms:
+                # Colocar espina en el centro de la plataforma
+                spike_x = platform['x'] + platform['width'] // 2 - 20  # Centrada
+                spike_y = platform['y'] - 30  # Encima de la plataforma
+                spike_width = 40
+                spike_height = 30
+                
+                # Validar que no se superpone con otras espinas
+                overlaps = False
+                for existing_spike in spikes:
+                    if self.rectangles_overlap(
+                        spike_x, spike_y, spike_width, spike_height,
+                        existing_spike['x'], existing_spike['y'],
+                        existing_spike['width'], existing_spike['height']
+                    ):
+                        overlaps = True
+                        break
+                
+                if not overlaps:
+                    spikes.append({
+                        'x': spike_x,
+                        'y': spike_y,
+                        'width': spike_width,
+                        'height': spike_height
                     })
         
         return spikes
+
     
     def add_goal(self, width, height):
         """Genera la meta al final del mundo"""
-        # Meta: bandera grande al final
         goal = {
-            'x': width - 120,      # Cerca del borde derecho
-            'y': height - 130,     # En el suelo
+            'x': width - 120,
+            'y': height - 130,
             'width': 60,
-            'height': 80,
-            'type': 'flag'         # Tipo de meta
+            'height': 80
         }
         return goal
+
     
     def add_special_features(self, world_data, width, height):
         """Añade música y características especiales del mundo de pasto"""
@@ -288,39 +594,48 @@ class DesertWorldGenerator(WorldGenerator):
         """Nombre del mundo"""
         return "Mundo Desértico"
     
-    def generate_platforms(self, width, height):
-        """Genera plataformas más separadas y difíciles que grass"""
+    def generate_platforms(self, width, height, checkpoints):
+        """Genera plataformas más separadas y difíciles, con ALTURAS ALCANZABLES"""
         platforms = []
         
-        # 1. SUELO PRINCIPAL - Cubre todo el mundo
-        platforms.append({
-            'x': 0, 
-            'y': height - 50, 
+        # 1. SUELO PRINCIPAL
+        ground = {
+            'x': 0,
+            'y': height - 50,
             'width': width,
             'height': 50
-        })
+        }
+        platforms.append(ground)
         
-        # 2. PLATAFORMAS DE INICIO (zona segura) - Menos generosas que grass
-        # Solo 2 plataformas iniciales (vs 2 en grass, pero más separadas)
-        platforms.append({
-            'x': 180, 
-            'y': height - 180,      # Más alta que grass (180 vs 150)
-            'width': 120,            # Más pequeña que grass (120 vs 150)
-            'height': 18             # Más delgada (18 vs 20)
-        })
-        platforms.append({
-            'x': 380, 
-            'y': height - 240,      # Mucho más alta (240 vs 200)
+        # 2. PLATAFORMAS DE INICIO
+        spawn_x = 100
+        spawn_y = 100
+        
+        first_platform = {
+            'x': 180,
+            'y': height - 180,  # 180px altura - ALCANZABLE
+            'width': 120,
+            'height': 18
+        }
+        
+        if self.is_platform_reachable(spawn_x, spawn_y, first_platform['x'], first_platform['y'], first_platform['width']):
+            platforms.append(first_platform)
+        
+        second_platform = {
+            'x': 380,
+            'y': height - 240,  # 240px altura - ALCANZABLE desde primera
             'width': 110,
             'height': 18
-        })
+        }
         
-        # 3. PLATAFORMAS DISTRIBUIDAS - Más difíciles que grass
+        if self.is_platform_reachable(first_platform['x'], first_platform['y'], second_platform['x'], second_platform['y'], second_platform['width']):
+            platforms.append(second_platform)
+        
+        # 3. PLATAFORMAS DISTRIBUIDAS - ALTURAS CORREGIDAS
         start_generation = 600
         end_generation = width - 400
         generation_width = end_generation - start_generation
         
-        # MEDIO: 7 segmentos (vs 6 en fácil)
         num_segments = 7
         segment_width = generation_width // num_segments
         
@@ -328,154 +643,432 @@ class DesertWorldGenerator(WorldGenerator):
             segment_start = start_generation + (segment * segment_width)
             segment_end = segment_start + segment_width
             
-            # MEDIO: 1-2 plataformas por segmento (vs 2-3 en fácil)
-            # Menos plataformas = más difícil
             num_platforms = random.randint(1, 2)
+            attempts_per_segment = 0
+            platforms_added_in_segment = 0
             
-            for i in range(num_platforms):
-                # Posición X aleatoria
+            while platforms_added_in_segment < num_platforms and attempts_per_segment < 25:
+                attempts_per_segment += 1
+                
+                margin_left = int(segment_width * 0.15)
+                margin_right = int(segment_width * 0.25)
+                
+                available_width = segment_width - margin_left - margin_right
+                if available_width < 80:
+                    break
+                
                 x = random.randint(
-                    segment_start + 100,   # Más margen que grass
-                    segment_end - 200
+                    segment_start + margin_left,
+                    segment_end - margin_right
                 )
                 
-                # MEDIO: Altura Y más variable y más alta
-                # Rango más amplio que grass para más variedad
+                # CORREGIDO: Altura máxima ALCANZABLE
+                # Desert medio: Entre 130px y 300px de altura
+                # Esto permite:
+                # - Saltos desde el suelo (hasta ~200px)
+                # - Saltos entre plataformas (hasta 200px diferencia)
                 y = random.randint(
-                    height - 380,  # Mucho más alto (380 vs 280 en grass)
-                    height - 140   # Similar mínimo pero puede ser más bajo
+                    height - 300,  # Máximo 300px alto (vs 380 antes) - ALCANZABLE
+                    height - 130   # Mínimo 130px alto
                 )
                 
-                # MEDIO: Plataformas medianas (más pequeñas que grass)
-                platform_width = random.randint(100, 140)  # vs 130-180 en grass
+                platform_width = random.randint(100, 140)
+                platform_height = 18
                 
+                # === VALIDACIÓN 1: No cerca de checkpoints ===
+                if self.is_near_checkpoint(x, y, checkpoints):
+                    continue
+                
+                # === VALIDACIÓN 2: No superpuesta ===
+                overlaps = False
+                for existing_platform in platforms:
+                    if self.rectangles_overlap(
+                        x, y, platform_width, platform_height,
+                        existing_platform['x'], existing_platform['y'],
+                        existing_platform['width'], existing_platform['height']
+                    ):
+                        overlaps = True
+                        break
+                
+                if overlaps:
+                    continue
+                
+                # === VALIDACIÓN 3: Espaciamiento riguroso ===
+                too_close = False
+                
+                for existing_platform in platforms:
+                    horizontal_distance = abs(x - existing_platform['x'])
+                    vertical_distance = abs(y - existing_platform['y'])
+                    
+                    if horizontal_distance < 220:
+                        if vertical_distance < MIN_VERTICAL_SPACING:
+                            too_close = True
+                            break
+                    
+                    if vertical_distance < 40:
+                        if horizontal_distance < MIN_HORIZONTAL_SPACING:
+                            too_close = True
+                            break
+                
+                if too_close:
+                    continue
+                
+                # === VALIDACIÓN 4: Alcanzable ===
+                is_reachable = False
+                
+                # Desde el suelo
+                ground_to_platform_height = (height - 50) - y
+                if ground_to_platform_height <= MAX_JUMP_HEIGHT:
+                    # Está suficientemente bajo para alcanzar desde el suelo
+                    is_reachable = True
+                
+                # Desde plataforma previa
+                if not is_reachable:
+                    for prev_platform in platforms:
+                        if prev_platform['x'] < x + 350:
+                            if self.is_platform_reachable(
+                                prev_platform['x'] + prev_platform['width'],
+                                prev_platform['y'],
+                                x,
+                                y,
+                                platform_width
+                            ):
+                                is_reachable = True
+                                break
+                
+                # Desde plataformas cercanas (bidireccional)
+                if not is_reachable:
+                    for prev_platform in platforms:
+                        if prev_platform['x'] > x - 350 and prev_platform['x'] < x + segment_width:
+                            if self.is_platform_reachable(
+                                prev_platform['x'],
+                                prev_platform['y'],
+                                x,
+                                y,
+                                platform_width
+                            ):
+                                is_reachable = True
+                                break
+                
+                if not is_reachable:
+                    continue
+                
+                # === VALIDACIONES PASADAS ===
                 platforms.append({
-                    'x': x, 
-                    'y': y, 
-                    'width': platform_width, 
-                    'height': 18  # Más delgadas (18 vs 20)
+                    'x': x,
+                    'y': y,
+                    'width': platform_width,
+                    'height': platform_height
                 })
+                platforms_added_in_segment += 1
         
-        # 4. PLATAFORMAS FLOTANTES ALTAS - Feature especial del desierto
-        # Añadir 3-4 plataformas muy altas distribuidas aleatoriamente
-        num_high_platforms = random.randint(3, 4)
-        high_platform_zones = random.sample(
-            range(1, num_segments - 1), 
-            min(num_high_platforms, num_segments - 2)
-        )
+        # 4. PLATAFORMAS FLOTANTES ALTAS - ALTURAS CORREGIDAS
+        # Feature de Desert pero con alturas alcanzables
+        num_high_platforms = random.randint(2, 3)
         
-        for zone in high_platform_zones:
-            zone_center = start_generation + (zone * segment_width) + (segment_width // 2)
+        if num_segments > 2:
+            eligible_segments = list(range(1, num_segments - 1))
+            selected_segments = random.sample(eligible_segments, min(num_high_platforms, len(eligible_segments)))
             
-            # Plataformas muy altas (desafío extra)
-            platforms.append({
-                'x': zone_center - 50,
-                'y': height - random.randint(400, 450),  # MUY altas
-                'width': random.randint(80, 110),         # Pequeñas
-                'height': 18
-            })
+            for zone in selected_segments:
+                attempts_high = 0
+                
+                while attempts_high < 15:
+                    attempts_high += 1
+                    
+                    zone_center = start_generation + (zone * segment_width) + (segment_width // 2)
+                    
+                    # CORREGIDO: Altura flotante entre 280-350px
+                    # Más alto que las normales pero aún ALCANZABLE desde otras plataformas
+                    high_y = height - random.randint(280, 350)  # vs 400-450 antes
+                    high_width = random.randint(80, 110)
+                    high_height = 18
+                    high_x = zone_center - random.randint(30, 70)
+                    
+                    # Validar checkpoints
+                    if self.is_near_checkpoint(high_x, high_y, checkpoints):
+                        continue
+                    
+                    # Validar superposición
+                    overlaps = False
+                    for existing_platform in platforms:
+                        if self.rectangles_overlap(
+                            high_x, high_y, high_width, high_height,
+                            existing_platform['x'], existing_platform['y'],
+                            existing_platform['width'], existing_platform['height']
+                        ):
+                            overlaps = True
+                            break
+                    
+                    if overlaps:
+                        continue
+                    
+                    # Validar espaciamiento
+                    too_close = False
+                    for existing_platform in platforms:
+                        horizontal_distance = abs(high_x - existing_platform['x'])
+                        vertical_distance = abs(high_y - existing_platform['y'])
+                        
+                        if horizontal_distance < 220 and vertical_distance < MIN_VERTICAL_SPACING:
+                            too_close = True
+                            break
+                    
+                    if too_close:
+                        continue
+                    
+                    # VALIDACIÓN CRÍTICA: Debe ser alcanzable desde ALGUNA plataforma cercana
+                    is_reachable = False
+                    for prev_platform in platforms:
+                        # Solo plataformas dentro de rango razonable
+                        horizontal_dist = abs(prev_platform['x'] - high_x)
+                        if horizontal_dist < 400:
+                            if self.is_platform_reachable(
+                                prev_platform['x'],
+                                prev_platform['y'],
+                                high_x,
+                                high_y,
+                                high_width
+                            ):
+                                is_reachable = True
+                                break
+                    
+                    if not is_reachable:
+                        continue  # No alcanzable, rechazar
+                    
+                    # Añadir plataforma alta
+                    platforms.append({
+                        'x': high_x,
+                        'y': high_y,
+                        'width': high_width,
+                        'height': high_height
+                    })
+                    break
         
-        # 5. PLATAFORMAS FINALES - Menos ayuda que grass
-        # Solo 1 plataforma final (vs 2 en grass)
-        platforms.append({
-            'x': width - 350, 
-            'y': height - 190,  # Más alta que grass
-            'width': 130, 
+        # 5. PLATAFORMA FINAL
+        final_platform = {
+            'x': width - 350,
+            'y': height - 190,
+            'width': 130,
             'height': 18
-        })
+        }
+        
+        if not self.is_near_checkpoint(final_platform['x'], final_platform['y'], checkpoints):
+            can_add = True
+            for existing_platform in platforms:
+                horizontal_distance = abs(final_platform['x'] - existing_platform['x'])
+                vertical_distance = abs(final_platform['y'] - existing_platform['y'])
+                
+                if horizontal_distance < 220 and vertical_distance < MIN_VERTICAL_SPACING:
+                    can_add = False
+                    break
+            
+            if can_add:
+                platforms.append(final_platform)
         
         return platforms
+
+
     
-    def generate_hazards(self, width, height):
-        """Genera más espinas que grass (cactus en el desierto)"""
+    def generate_hazards(self, width, height, platforms, checkpoints):
+        """Genera espinas con validaciones RIGUROSAS - Nivel MEDIO"""
         spikes = []
+        ground_y = height - 50
         
-        # 1. ZONA SEGURA DE INICIO - Más corta que grass
-        safe_zone = 400  # vs 500 en grass
+        # 1. ZONA SEGURA
+        safe_zone = 400
         
         # 2. ZONA DE GENERACIÓN
         start_generation = safe_zone
-        end_generation = width - 250  # Espinas más cerca de la meta que grass
+        end_generation = width - 250
         generation_width = end_generation - start_generation
         
         # 3. DIVIDIR EN ZONAS
-        num_zones = 12  # Más zonas = más densidad potencial (vs 10 en grass)
+        num_zones = 12
         zone_width = generation_width // num_zones
         
-        # 4. ESPINAS INDIVIDUALES - Más frecuentes que grass
+        # 4. ESPINAS EN EL SUELO - Individuales
         for zone in range(num_zones):
             zone_start = start_generation + (zone * zone_width)
             zone_end = zone_start + zone_width
             
-            # MEDIO: 45% probabilidad (vs 25% en fácil)
+            # MEDIO: 45% probabilidad
             if random.random() < 0.45:
-                x = random.randint(zone_start + 30, zone_end - 30)
+                attempts = 0
+                spike_placed = False
                 
-                spikes.append({
-                    'x': x, 
-                    'y': height - 80,
-                    'width': 38,   # Ligeramente más anchos
-                    'height': 32   # Ligeramente más altos
-                })
+                while not spike_placed and attempts < 8:
+                    attempts += 1
+                    
+                    x = random.randint(zone_start + 30, zone_end - 30)
+                    y = ground_y - 32  # EN EL SUELO
+                    spike_width = 38
+                    spike_height = 32
+                    
+                    # Validar checkpoints
+                    if self.is_near_checkpoint(x, y, checkpoints, radius=150):
+                        continue
+                    
+                    # IMPORTANTE: Verificar que está sobre el suelo
+                    if not self.is_on_surface(x, y, spike_height, platforms, ground_y):
+                        continue
+                    
+                    # Validar superposición
+                    overlaps = False
+                    for existing_spike in spikes:
+                        if self.rectangles_overlap(
+                            x, y, spike_width, spike_height,
+                            existing_spike['x'], existing_spike['y'],
+                            existing_spike['width'], existing_spike['height']
+                        ):
+                            overlaps = True
+                            break
+                    
+                    if overlaps:
+                        continue
+                    
+                    spikes.append({
+                        'x': x,
+                        'y': y,
+                        'width': spike_width,
+                        'height': spike_height
+                    })
+                    spike_placed = True
         
-        # 5. ZONAS DE PELIGRO - Más que grass
-        # 3 zonas de peligro (vs 2 en grass)
+        # 5. ZONAS DE PELIGRO (grupos en el suelo)
         if num_zones >= 4:
             danger_zones = random.sample(
-                range(2, num_zones - 1), 
+                range(2, num_zones - 1),
                 min(3, num_zones - 3)
             )
             
             for danger_zone in danger_zones:
                 zone_start = start_generation + (danger_zone * zone_width)
+                zone_center_x = zone_start + zone_width // 2
+                zone_center_y = ground_y - 32
                 
-                # MEDIO: 3-4 espinas juntas (vs 2-3 en fácil)
+                if self.is_near_checkpoint(zone_center_x, zone_center_y, checkpoints, radius=200):
+                    continue
+                
                 num_spikes_in_danger = random.randint(3, 4)
+                spikes_added = 0
                 
                 for i in range(num_spikes_in_danger):
+                    x = zone_start + (spikes_added * 50) + 40
+                    y = ground_y - 32  # EN EL SUELO
+                    spike_width = 38
+                    spike_height = 32
+                    
+                    if self.is_near_checkpoint(x, y, checkpoints, radius=150):
+                        continue
+                    
+                    # Verificar que está en el suelo
+                    if not self.is_on_surface(x, y, spike_height, platforms, ground_y):
+                        continue
+                    
+                    overlaps = False
+                    for existing_spike in spikes:
+                        if self.rectangles_overlap(
+                            x, y, spike_width, spike_height,
+                            existing_spike['x'], existing_spike['y'],
+                            existing_spike['width'], existing_spike['height']
+                        ):
+                            overlaps = True
+                            break
+                    
+                    if overlaps:
+                        continue
+                    
                     spikes.append({
-                        'x': zone_start + (i * 50) + 40,
-                        'y': height - 80,
-                        'width': 38,
-                        'height': 32
+                        'x': x,
+                        'y': y,
+                        'width': spike_width,
+                        'height': spike_height
                     })
+                    spikes_added += 1
         
-        # 6. ESPINAS EN PLATAFORMAS (feature del desierto)
-        # Algunas espinas flotantes en ciertas plataformas
-        num_platform_spikes = random.randint(2, 3)
+        # 6. ESPINAS SOBRE PLATAFORMAS (NO flotantes, SOBRE plataformas)
+        eligible_platforms = []
         
-        for _ in range(num_platform_spikes):
-            # Posición aleatoria en el mundo
-            spike_x = random.randint(
-                start_generation + 200,
-                end_generation - 200
-            )
+        for platform in platforms:
+            # No es el suelo principal
+            if platform['y'] < height - 100:
+                # No cerca de checkpoints
+                if not self.is_near_checkpoint(platform['x'] + platform['width'] // 2, platform['y'], checkpoints, radius=200):
+                    # Plataforma suficientemente grande para una espina
+                    if platform['width'] >= 80:
+                        eligible_platforms.append(platform)
+        
+        # MEDIO: 2-3 espinas en plataformas
+        num_platform_spikes = min(random.randint(2, 3), len(eligible_platforms))
+        
+        if num_platform_spikes > 0 and len(eligible_platforms) > 0:
+            selected_platforms = random.sample(eligible_platforms, num_platform_spikes)
             
-            # Altura aleatoria flotante
-            spike_y = random.randint(
-                height - 350,
-                height - 150
-            )
-            
-            spikes.append({
-                'x': spike_x,
-                'y': spike_y,
-                'width': 38,
-                'height': 32
-            })
+            for platform in selected_platforms:
+                attempts = 0
+                spike_placed = False
+                
+                while not spike_placed and attempts < 5:
+                    attempts += 1
+                    
+                    # Posición centrada o aleatoria en la plataforma
+                    available_space = platform['width'] - 60  # Margen
+                    
+                    if available_space < 40:
+                        break  # Plataforma muy pequeña
+                    
+                    offset = random.randint(20, int(available_space))
+                    spike_x = platform['x'] + offset
+                    spike_y = platform['y'] - 32  # SOBRE la plataforma
+                    spike_width = 38
+                    spike_height = 32
+                    
+                    # CRÍTICO: Verificar que está EXACTAMENTE sobre esta plataforma
+                    spike_bottom = spike_y + spike_height
+                    if abs(spike_bottom - platform['y']) > 2:
+                        continue  # No está alineada con la plataforma
+                    
+                    # Verificar que está dentro del rango horizontal
+                    if spike_x < platform['x'] or spike_x + spike_width > platform['x'] + platform['width']:
+                        continue
+                    
+                    # Validar superposición con otras espinas
+                    overlaps = False
+                    for existing_spike in spikes:
+                        if self.rectangles_overlap(
+                            spike_x, spike_y, spike_width, spike_height,
+                            existing_spike['x'], existing_spike['y'],
+                            existing_spike['width'], existing_spike['height']
+                        ):
+                            overlaps = True
+                            break
+                    
+                    if overlaps:
+                        continue
+                    
+                    spikes.append({
+                        'x': spike_x,
+                        'y': spike_y,
+                        'width': spike_width,
+                        'height': spike_height,
+                        'on_platform': True  # Flag para indicar que está sobre plataforma
+                    })
+                    spike_placed = True
         
         return spikes
+
+
     
     def add_goal(self, width, height):
-        """Meta del desierto - Oasis al final"""
+        """Meta del desierto al final"""
         goal = {
             'x': width - 110,
             'y': height - 130,
             'width': 60,
-            'height': 80,
-            'type': 'oasis'  # Tipo específico del desierto
+            'height': 80
         }
         return goal
+
     
     def add_special_features(self, world_data, width, height):
         """Añade música y características del desierto"""
@@ -506,258 +1099,402 @@ class IceWorldGenerator(WorldGenerator):
         """Nombre del mundo"""
         return "Mundo de Hielo"
     
-    def generate_platforms(self, width, height):
-        """Genera plataformas estrechas y muy separadas (difícil)"""
+    def generate_platforms(self, width, height, checkpoints):
+        """Genera plataformas estrechas y muy separadas - DIFÍCIL pero estructura simple"""
         platforms = []
         
-        # 1. SUELO PRINCIPAL - Pero con huecos (feature del hielo)
-        # DIFÍCIL: El suelo NO es continuo, tiene gaps
-        num_ground_segments = 8
-        segment_width = width // num_ground_segments
+        # 1. SUELO PRINCIPAL - Continuo como Grass y Desert
+        ground = {
+            'x': 0,
+            'y': height - 50,
+            'width': width,
+            'height': 50
+        }
+        platforms.append(ground)
         
-        for segment in range(num_ground_segments):
-            segment_start = segment * segment_width
-            
-            # 70% probabilidad de que este segmento tenga suelo
-            # 30% probabilidad de gap = caída al vacío
-            if random.random() < 0.70 or segment == 0:  # Primer segmento siempre tiene suelo
-                platforms.append({
-                    'x': segment_start,
-                    'y': height - 50,
-                    'width': segment_width - 20,  # Gap de 20px entre segmentos
-                    'height': 50
-                })
+        # 2. PLATAFORMAS DE INICIO - Más desafiantes
+        spawn_x = 100
+        spawn_y = 100
         
-        # 2. PLATAFORMAS DE INICIO - Muy básicas y desafiantes
-        # Solo 2 plataformas pequeñas
-        platforms.append({
-            'x': 200,
-            'y': height - 220,      # Muy alta desde el inicio (220 vs 180 desert)
-            'width': 90,            # Muy pequeña (90 vs 120 desert)
-            'height': 15            # Muy delgada (15 vs 18 desert)
-        })
-        platforms.append({
-            'x': 420,
-            'y': height - 300,      # Extremadamente alta (300 vs 240 desert)
-            'width': 85,            # Muy pequeña
+        first_platform = {
+            'x': 220,  # Más lejos que Desert (vs 180)
+            'y': height - 200,
+            'width': 85,  # Más pequeña (vs 120 Desert)
+            'height': 15  # Más delgada
+        }
+        
+        if self.is_platform_reachable(spawn_x, spawn_y, first_platform['x'], first_platform['y'], first_platform['width']):
+            platforms.append(first_platform)
+        
+        second_platform = {
+            'x': 450,  # Más lejos (vs 380 Desert)
+            'y': height - 280,
+            'width': 80,
             'height': 15
-        })
+        }
         
-        # 3. PLATAFORMAS DISTRIBUIDAS - Extremadamente difíciles
-        start_generation = 650
+        if self.is_platform_reachable(first_platform['x'], first_platform['y'], second_platform['x'], second_platform['y'], second_platform['width']):
+            platforms.append(second_platform)
+        
+        # 3. PLATAFORMAS DISTRIBUIDAS - DIFÍCIL
+        start_generation = 700  # Empieza más tarde (vs 600)
         end_generation = width - 400
         generation_width = end_generation - start_generation
         
-        # DIFÍCIL: 8 segmentos (más que desert para distribuir mejor)
-        num_segments = 8
+        num_segments = 8  # Más segmentos que Desert (vs 7)
         segment_width = generation_width // num_segments
         
         for segment in range(num_segments):
             segment_start = start_generation + (segment * segment_width)
             segment_end = segment_start + segment_width
             
-            # DIFÍCIL: 1 plataforma por segmento (vs 1-2 en medio)
-            # Algunas veces ninguna (20% probabilidad de segmento vacío)
-            if random.random() < 0.80:  # 20% chance de NO generar plataforma
+            # DIFÍCIL: Solo 1 plataforma por segmento (vs 1-2 Desert)
+            # 85% probabilidad (15% segmentos vacíos)
+            if random.random() < 0.85:
                 
-                # Posición X aleatoria
-                x = random.randint(
-                    segment_start + 120,   # Más margen que desert
-                    segment_end - 220
-                )
+                attempts_per_segment = 0
+                platform_placed = False
                 
-                # DIFÍCIL: Altura Y muy variable y extrema
-                # Puede estar MUUUY alta o baja
-                y = random.randint(
-                    height - 480,  # Extremadamente alto (480 vs 380 desert)
-                    height - 150   # Puede estar bajo también
-                )
-                
-                # DIFÍCIL: Plataformas muy estrechas
-                platform_width = random.randint(70, 100)  # vs 100-140 desert
-                
-                platforms.append({
-                    'x': x,
-                    'y': y,
-                    'width': platform_width,
-                    'height': 15  # Muy delgadas (15 vs 18 desert)
-                })
+                while not platform_placed and attempts_per_segment < 30:
+                    attempts_per_segment += 1
+                    
+                    # Márgenes más estrictos
+                    margin_left = int(segment_width * 0.25)  # vs 0.15 Desert
+                    margin_right = int(segment_width * 0.35)  # vs 0.25 Desert
+                    
+                    available_width = segment_width - margin_left - margin_right
+                    if available_width < 60:
+                        break
+                    
+                    x = random.randint(
+                        segment_start + margin_left,
+                        segment_end - margin_right
+                    )
+                    
+                    # DIFÍCIL: Altura muy variable
+                    y = random.randint(
+                        height - 350,  # Muy alto
+                        height - 140   # Muy bajo
+                    )
+                    
+                    # DIFÍCIL: Plataformas muy estrechas
+                    platform_width = random.randint(65, 95)  # vs 100-140 Desert
+                    platform_height = 15
+                    
+                    # === VALIDACIÓN 1: No cerca de checkpoints ===
+                    if self.is_near_checkpoint(x, y, checkpoints):
+                        continue
+                    
+                    # === VALIDACIÓN 2: No superpuesta ===
+                    overlaps = False
+                    for existing_platform in platforms:
+                        if self.rectangles_overlap(
+                            x, y, platform_width, platform_height,
+                            existing_platform['x'], existing_platform['y'],
+                            existing_platform['width'], existing_platform['height']
+                        ):
+                            overlaps = True
+                            break
+                    
+                    if overlaps:
+                        continue
+                    
+                    # === VALIDACIÓN 3: Espaciamiento muy estricto ===
+                    too_close = False
+                    
+                    for existing_platform in platforms:
+                        horizontal_distance = abs(x - existing_platform['x'])
+                        vertical_distance = abs(y - existing_platform['y'])
+                        
+                        # DIFÍCIL: Espaciamiento más amplio
+                        if horizontal_distance < 270:  # vs 220 Desert
+                            if vertical_distance < MIN_VERTICAL_SPACING:
+                                too_close = True
+                                break
+                        
+                        if vertical_distance < 30:
+                            if horizontal_distance < 130:  # vs 100
+                                too_close = True
+                                break
+                    
+                    if too_close:
+                        continue
+                    
+                    # === VALIDACIÓN 4: Alcanzable ===
+                    is_reachable = False
+                    
+                    # Desde el suelo
+                    ground_height_diff = (height - 50) - y
+                    if ground_height_diff <= MAX_JUMP_HEIGHT:
+                        is_reachable = True
+                    
+                    # Desde plataforma previa
+                    if not is_reachable:
+                        for prev_platform in platforms:
+                            if prev_platform['y'] != height - 50:
+                                if prev_platform['x'] < x + 400:
+                                    if self.is_platform_reachable(
+                                        prev_platform['x'] + prev_platform['width'],
+                                        prev_platform['y'],
+                                        x,
+                                        y,
+                                        platform_width
+                                    ):
+                                        is_reachable = True
+                                        break
+                    
+                    # Bidireccional
+                    if not is_reachable:
+                        for prev_platform in platforms:
+                            if prev_platform['y'] != height - 50:
+                                if abs(prev_platform['x'] - x) < 400:
+                                    if self.is_platform_reachable(
+                                        prev_platform['x'],
+                                        prev_platform['y'],
+                                        x,
+                                        y,
+                                        platform_width
+                                    ):
+                                        is_reachable = True
+                                        break
+                    
+                    if not is_reachable:
+                        continue
+                    
+                    # === VALIDACIONES PASADAS ===
+                    platforms.append({
+                        'x': x,
+                        'y': y,
+                        'width': platform_width,
+                        'height': platform_height
+                    })
+                    platform_placed = True
         
-        # 4. PLATAFORMAS MÓVILES SIMULADAS - Feature del hielo
-        # Plataformas muy pequeñas en posiciones difíciles
-        # (En el futuro podrían moverse, por ahora solo son muy pequeñas)
-        num_tiny_platforms = random.randint(4, 6)
-        
-        for _ in range(num_tiny_platforms):
-            x = random.randint(start_generation, end_generation - 100)
-            y = random.randint(height - 450, height - 200)
-            
-            platforms.append({
-                'x': x,
-                'y': y,
-                'width': random.randint(60, 80),  # MUY pequeñas
-                'height': 12,  # Extra delgadas
-                'slippery': True  # Flag para física resbaladiza
-            })
-        
-        # 5. PLATAFORMAS VERTICALES - Feature único del hielo
-        # Torres/columnas de plataformas apiladas
-        num_towers = 2
-        tower_positions = random.sample(
-            range(2, num_segments - 2),
-            min(num_towers, num_segments - 4)
-        )
-        
-        for tower_segment in tower_positions:
-            tower_x = start_generation + (tower_segment * segment_width) + (segment_width // 2)
-            
-            # 3-4 plataformas apiladas verticalmente
-            num_levels = random.randint(3, 4)
-            for level in range(num_levels):
-                platforms.append({
-                    'x': tower_x - 40,
-                    'y': height - 150 - (level * 100),  # Separadas 100px verticalmente
-                    'width': 80,
-                    'height': 15
-                })
-        
-        # 6. PLATAFORMAS FINALES - Mínima ayuda
-        # Solo 1 plataforma y muy alta
-        platforms.append({
+        # 4. PLATAFORMA FINAL
+        final_platform = {
             'x': width - 380,
-            'y': height - 230,  # Muy alta (230 vs 190 desert)
-            'width': 100,       # Pequeña
+            'y': height - 210,
+            'width': 95,  # Pequeña
             'height': 15
-        })
+        }
+        
+        if not self.is_near_checkpoint(final_platform['x'], final_platform['y'], checkpoints):
+            can_add = True
+            for existing_platform in platforms:
+                horizontal_distance = abs(final_platform['x'] - existing_platform['x'])
+                vertical_distance = abs(final_platform['y'] - existing_platform['y'])
+                
+                if horizontal_distance < 270 and vertical_distance < MIN_VERTICAL_SPACING:
+                    can_add = False
+                    break
+            
+            if can_add:
+                platforms.append(final_platform)
         
         return platforms
+
+
     
-    def generate_hazards(self, width, height):
-        """Genera MUCHAS espinas (estalactitas y hielo puntiagudo)"""
+    def generate_hazards(self, width, height, platforms, checkpoints):
+        """Genera espinas con máxima densidad - DIFÍCIL pero estructura simple"""
         spikes = []
+        ground_y = height - 50
         
-        # 1. ZONA SEGURA DE INICIO - Muy corta
-        safe_zone = 350  # vs 400 desert, 500 grass
+        # 1. ZONA SEGURA - Muy corta
+        safe_zone = 350
         
         # 2. ZONA DE GENERACIÓN
         start_generation = safe_zone
-        end_generation = width - 200  # Espinas MUY cerca de la meta
+        end_generation = width - 200
         generation_width = end_generation - start_generation
         
-        # 3. DIVIDIR EN ZONAS - Más densidad
-        num_zones = 15  # Más zonas que desert (vs 12)
+        # 3. DIVIDIR EN ZONAS - Máxima densidad
+        num_zones = 16  # Más que Desert (vs 12)
         zone_width = generation_width // num_zones
         
-        # 4. ESPINAS EN EL SUELO - Muy frecuentes
+        # 4. ESPINAS INDIVIDUALES EN EL SUELO - Máxima frecuencia
         for zone in range(num_zones):
             zone_start = start_generation + (zone * zone_width)
             zone_end = zone_start + zone_width
             
-            # DIFÍCIL: 60% probabilidad (vs 45% desert, 25% grass)
-            if random.random() < 0.60:
-                x = random.randint(zone_start + 25, zone_end - 25)
+            # DIFÍCIL: 65% probabilidad (vs 60% inicial, 45% Desert, 25% Grass)
+            if random.random() < 0.65:
+                attempts = 0
+                spike_placed = False
                 
-                spikes.append({
-                    'x': x,
-                    'y': height - 80,
-                    'width': 35,   # Más delgados (más difíciles de ver/evitar)
-                    'height': 35   # Más altos
-                })
+                while not spike_placed and attempts < 10:
+                    attempts += 1
+                    
+                    x = random.randint(zone_start + 25, zone_end - 25)
+                    y = ground_y - 35
+                    spike_width = 35
+                    spike_height = 35
+                    
+                    # Validar checkpoints
+                    if self.is_near_checkpoint(x, y, checkpoints, radius=150):
+                        continue
+                    
+                    # Validar superficie
+                    if not self.is_on_surface(x, y, spike_height, platforms, ground_y):
+                        continue
+                    
+                    # Validar superposición
+                    overlaps = False
+                    for existing_spike in spikes:
+                        if self.rectangles_overlap(
+                            x, y, spike_width, spike_height,
+                            existing_spike['x'], existing_spike['y'],
+                            existing_spike['width'], existing_spike['height']
+                        ):
+                            overlaps = True
+                            break
+                    
+                    if overlaps:
+                        continue
+                    
+                    spikes.append({
+                        'x': x,
+                        'y': y,
+                        'width': spike_width,
+                        'height': spike_height
+                    })
+                    spike_placed = True
         
-        # 5. ZONAS DE PELIGRO EXTREMO
-        # 4 zonas (vs 3 desert, 2 grass)
+        # 5. ZONAS DE PELIGRO - Máximas
         if num_zones >= 5:
+            # 5 zonas de peligro (vs 4 antes, 3 Desert, 2 Grass)
             danger_zones = random.sample(
                 range(2, num_zones - 1),
-                min(4, num_zones - 3)
+                min(5, num_zones - 3)
             )
             
             for danger_zone in danger_zones:
                 zone_start = start_generation + (danger_zone * zone_width)
+                zone_center_x = zone_start + zone_width // 2
+                zone_center_y = ground_y - 35
                 
-                # DIFÍCIL: 4-6 espinas juntas (vs 3-4 desert, 2-3 grass)
-                num_spikes_in_danger = random.randint(4, 6)
+                if self.is_near_checkpoint(zone_center_x, zone_center_y, checkpoints, radius=200):
+                    continue
+                
+                # DIFÍCIL: 5-7 espinas juntas (vs 4-6 antes, 3-4 Desert, 2-3 Grass)
+                num_spikes_in_danger = random.randint(5, 7)
+                spikes_added = 0
                 
                 for i in range(num_spikes_in_danger):
+                    x = zone_start + (spikes_added * 45) + 30
+                    y = ground_y - 35
+                    spike_width = 35
+                    spike_height = 35
+                    
+                    if self.is_near_checkpoint(x, y, checkpoints, radius=150):
+                        continue
+                    
+                    if not self.is_on_surface(x, y, spike_height, platforms, ground_y):
+                        continue
+                    
+                    overlaps = False
+                    for existing_spike in spikes:
+                        if self.rectangles_overlap(
+                            x, y, spike_width, spike_height,
+                            existing_spike['x'], existing_spike['y'],
+                            existing_spike['width'], existing_spike['height']
+                        ):
+                            overlaps = True
+                            break
+                    
+                    if overlaps:
+                        continue
+                    
                     spikes.append({
-                        'x': zone_start + (i * 45) + 30,
-                        'y': height - 80,
-                        'width': 35,
-                        'height': 35
+                        'x': x,
+                        'y': y,
+                        'width': spike_width,
+                        'height': spike_height
                     })
+                    spikes_added += 1
         
-        # 6. ESTALACTITAS (espinas colgando del techo) - Feature único del hielo
-        num_stalactites = random.randint(8, 12)  # Muchas
+        # 6. ESPINAS EN PLATAFORMAS - Máximas
+        eligible_platforms = []
         
-        for _ in range(num_stalactites):
-            x = random.randint(start_generation, end_generation)
+        for platform in platforms:
+            # No es el suelo
+            if platform['y'] < height - 100:
+                # No cerca de checkpoints
+                if not self.is_near_checkpoint(platform['x'] + platform['width'] // 2, platform['y'], checkpoints, radius=200):
+                    # Plataforma suficientemente grande
+                    if platform['width'] >= 65:
+                        eligible_platforms.append(platform)
+        
+        # DIFÍCIL: 5-7 espinas en plataformas (vs 4-6 antes, 2-3 Desert, 0-2 Grass)
+        num_platform_spikes = min(random.randint(5, 7), len(eligible_platforms))
+        
+        if num_platform_spikes > 0 and len(eligible_platforms) > 0:
+            selected_platforms = random.sample(eligible_platforms, num_platform_spikes)
             
-            # Cuelgan del techo (parte superior de la pantalla)
-            spikes.append({
-                'x': x,
-                'y': 30,  # Cerca del techo
-                'width': 30,
-                'height': random.randint(60, 100),  # Altura variable (cuelgan)
-                'hanging': True  # Flag para dibujar invertido
-            })
-        
-        # 7. ESPINAS FLOTANTES EN PLATAFORMAS - Más que desert
-        num_platform_spikes = random.randint(4, 6)  # vs 2-3 desert
-        
-        for _ in range(num_platform_spikes):
-            spike_x = random.randint(
-                start_generation + 200,
-                end_generation - 200
-            )
-            
-            # Altura aleatoria flotante
-            spike_y = random.randint(
-                height - 450,  # Más alto que desert
-                height - 150
-            )
-            
-            spikes.append({
-                'x': spike_x,
-                'y': spike_y,
-                'width': 35,
-                'height': 35
-            })
-        
-        # 8. CAMPOS DE ESPINAS (áreas grandes llenas) - Feature extremo
-        # 2 áreas grandes con muchas espinas
-        num_spike_fields = 2
-        field_zones = random.sample(
-            range(3, num_zones - 3),
-            min(num_spike_fields, num_zones - 6)
-        )
-        
-        for field_zone in field_zones:
-            field_start = start_generation + (field_zone * zone_width)
-            field_width = zone_width * 2  # Ocupa 2 zonas
-            
-            # Llenar con espinas cada 60px
-            num_spikes_in_field = field_width // 60
-            
-            for i in range(num_spikes_in_field):
-                spikes.append({
-                    'x': field_start + (i * 60) + 20,
-                    'y': height - 80,
-                    'width': 35,
-                    'height': 35
-                })
+            for platform in selected_platforms:
+                attempts = 0
+                spike_placed = False
+                
+                while not spike_placed and attempts < 5:
+                    attempts += 1
+                    
+                    available_space = platform['width'] - 45
+                    
+                    if available_space < 35:
+                        break
+                    
+                    offset = random.randint(10, int(max(10, available_space)))
+                    spike_x = platform['x'] + offset
+                    spike_y = platform['y'] - 35
+                    spike_width = 35
+                    spike_height = 35
+                    
+                    # Verificar alineación
+                    spike_bottom = spike_y + spike_height
+                    if abs(spike_bottom - platform['y']) > 2:
+                        continue
+                    
+                    # Verificar rango horizontal
+                    if spike_x < platform['x'] or spike_x + spike_width > platform['x'] + platform['width']:
+                        continue
+                    
+                    # Validar superposición
+                    overlaps = False
+                    for existing_spike in spikes:
+                        if self.rectangles_overlap(
+                            spike_x, spike_y, spike_width, spike_height,
+                            existing_spike['x'], existing_spike['y'],
+                            existing_spike['width'], existing_spike['height']
+                        ):
+                            overlaps = True
+                            break
+                    
+                    if overlaps:
+                        continue
+                    
+                    spikes.append({
+                        'x': spike_x,
+                        'y': spike_y,
+                        'width': spike_width,
+                        'height': spike_height,
+                        'on_platform': True
+                    })
+                    spike_placed = True
         
         return spikes
+
+
     
     def add_goal(self, width, height):
-        """Meta del hielo - Iglú o portal al final"""
+        """Meta del hielo al final"""
         goal = {
             'x': width - 100,
             'y': height - 130,
             'width': 60,
-            'height': 80,
-            'type': 'igloo'  # Tipo específico del hielo
+            'height': 80
         }
         return goal
+
     
     def add_special_features(self, world_data, width, height):
         """Añade física resbaladiza y música del hielo"""

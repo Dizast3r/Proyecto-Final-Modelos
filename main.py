@@ -13,7 +13,7 @@ ALTO_VENTANA = 600
 
 def main():
     # Crear el juego
-    game = Game(ANCHO_DEL_MUNDO, ALTO_VENTANA, ANCHO_DEL_MUNDO)
+    game = Game(ANCHO_VENTANA, ALTO_VENTANA, ANCHO_DEL_MUNDO)
     
     # Crear generadores de mundos (Template Method Pattern)
     grass_generator = GrassWorldGenerator()
@@ -22,9 +22,9 @@ def main():
     
     # Generar mundos
     worlds = {
-        'grass': grass_generator.generate_world(game.width, game.height),
-        'desert': desert_generator.generate_world(game.width, game.height),
-        'ice': ice_generator.generate_world(game.width, game.height)
+        'grass': grass_generator.generate_world(game.world_width, game.height),
+        'desert': desert_generator.generate_world(game.world_width, game.height),
+        'ice': ice_generator.generate_world(game.world_width, game.height)
     }
     
     # Cargar mundo inicial (pasto)
