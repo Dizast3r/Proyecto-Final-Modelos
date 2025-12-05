@@ -494,50 +494,283 @@ class IceWorldGenerator(WorldGenerator):
     """Generador de mundo de hielo (nivel difícil)"""
     
     def define_colors(self):
+        """Colores fríos y helados"""
         return {
-            'sky': (176, 224, 230),      # Azul hielo
+            'sky': (176, 224, 230),      # Azul hielo pálido
             'ground': (240, 248, 255),   # Blanco hielo
-            'platform': (175, 238, 238),  # Turquesa claro
-            'hazard': (70, 130, 180)     # Azul acero
+            'platform': (175, 238, 238),  # Turquesa helado
+            'hazard': (70, 130, 180)     # Azul acero (estalactitas)
         }
     
     def get_world_name(self):
+        """Nombre del mundo"""
         return "Mundo de Hielo"
     
     def generate_platforms(self, width, height):
+        """Genera plataformas estrechas y muy separadas (difícil)"""
         platforms = []
         
-        # Suelo principal
-        platforms.append({'x': 0, 'y': height - 50, 'width': width, 'height': 50})
+        # 1. SUELO PRINCIPAL - Pero con huecos (feature del hielo)
+        # DIFÍCIL: El suelo NO es continuo, tiene gaps
+        num_ground_segments = 8
+        segment_width = width // num_ground_segments
         
-        # Plataformas estrechas y altas (difícil)
-        for i in range(7):
-            x = 100 + i * 250
-            y = height - 200 - (i % 4) * 70
-            platforms.append({'x': x, 'y': y, 'width': 100, 'height': 15})
+        for segment in range(num_ground_segments):
+            segment_start = segment * segment_width
+            
+            # 70% probabilidad de que este segmento tenga suelo
+            # 30% probabilidad de gap = caída al vacío
+            if random.random() < 0.70 or segment == 0:  # Primer segmento siempre tiene suelo
+                platforms.append({
+                    'x': segment_start,
+                    'y': height - 50,
+                    'width': segment_width - 20,  # Gap de 20px entre segmentos
+                    'height': 50
+                })
         
-        # Plataformas muy altas
-        platforms.append({'x': 500, 'y': height - 400, 'width': 90, 'height': 15})
-        platforms.append({'x': 1000, 'y': height - 450, 'width': 90, 'height': 15})
+        # 2. PLATAFORMAS DE INICIO - Muy básicas y desafiantes
+        # Solo 2 plataformas pequeñas
+        platforms.append({
+            'x': 200,
+            'y': height - 220,      # Muy alta desde el inicio (220 vs 180 desert)
+            'width': 90,            # Muy pequeña (90 vs 120 desert)
+            'height': 15            # Muy delgada (15 vs 18 desert)
+        })
+        platforms.append({
+            'x': 420,
+            'y': height - 300,      # Extremadamente alta (300 vs 240 desert)
+            'width': 85,            # Muy pequeña
+            'height': 15
+        })
+        
+        # 3. PLATAFORMAS DISTRIBUIDAS - Extremadamente difíciles
+        start_generation = 650
+        end_generation = width - 400
+        generation_width = end_generation - start_generation
+        
+        # DIFÍCIL: 8 segmentos (más que desert para distribuir mejor)
+        num_segments = 8
+        segment_width = generation_width // num_segments
+        
+        for segment in range(num_segments):
+            segment_start = start_generation + (segment * segment_width)
+            segment_end = segment_start + segment_width
+            
+            # DIFÍCIL: 1 plataforma por segmento (vs 1-2 en medio)
+            # Algunas veces ninguna (20% probabilidad de segmento vacío)
+            if random.random() < 0.80:  # 20% chance de NO generar plataforma
+                
+                # Posición X aleatoria
+                x = random.randint(
+                    segment_start + 120,   # Más margen que desert
+                    segment_end - 220
+                )
+                
+                # DIFÍCIL: Altura Y muy variable y extrema
+                # Puede estar MUUUY alta o baja
+                y = random.randint(
+                    height - 480,  # Extremadamente alto (480 vs 380 desert)
+                    height - 150   # Puede estar bajo también
+                )
+                
+                # DIFÍCIL: Plataformas muy estrechas
+                platform_width = random.randint(70, 100)  # vs 100-140 desert
+                
+                platforms.append({
+                    'x': x,
+                    'y': y,
+                    'width': platform_width,
+                    'height': 15  # Muy delgadas (15 vs 18 desert)
+                })
+        
+        # 4. PLATAFORMAS MÓVILES SIMULADAS - Feature del hielo
+        # Plataformas muy pequeñas en posiciones difíciles
+        # (En el futuro podrían moverse, por ahora solo son muy pequeñas)
+        num_tiny_platforms = random.randint(4, 6)
+        
+        for _ in range(num_tiny_platforms):
+            x = random.randint(start_generation, end_generation - 100)
+            y = random.randint(height - 450, height - 200)
+            
+            platforms.append({
+                'x': x,
+                'y': y,
+                'width': random.randint(60, 80),  # MUY pequeñas
+                'height': 12,  # Extra delgadas
+                'slippery': True  # Flag para física resbaladiza
+            })
+        
+        # 5. PLATAFORMAS VERTICALES - Feature único del hielo
+        # Torres/columnas de plataformas apiladas
+        num_towers = 2
+        tower_positions = random.sample(
+            range(2, num_segments - 2),
+            min(num_towers, num_segments - 4)
+        )
+        
+        for tower_segment in tower_positions:
+            tower_x = start_generation + (tower_segment * segment_width) + (segment_width // 2)
+            
+            # 3-4 plataformas apiladas verticalmente
+            num_levels = random.randint(3, 4)
+            for level in range(num_levels):
+                platforms.append({
+                    'x': tower_x - 40,
+                    'y': height - 150 - (level * 100),  # Separadas 100px verticalmente
+                    'width': 80,
+                    'height': 15
+                })
+        
+        # 6. PLATAFORMAS FINALES - Mínima ayuda
+        # Solo 1 plataforma y muy alta
+        platforms.append({
+            'x': width - 380,
+            'y': height - 230,  # Muy alta (230 vs 190 desert)
+            'width': 100,       # Pequeña
+            'height': 15
+        })
         
         return platforms
     
     def generate_hazards(self, width, height):
+        """Genera MUCHAS espinas (estalactitas y hielo puntiagudo)"""
         spikes = []
         
-        # Muchas espinas de hielo
-        for i in range(12):
-            x = 200 + i * 150
-            spikes.append({'x': x, 'y': height - 80, 'width': 35, 'height': 30})
+        # 1. ZONA SEGURA DE INICIO - Muy corta
+        safe_zone = 350  # vs 400 desert, 500 grass
         
-        # Estalactitas (espinas colgantes - implementación futura)
-        for i in range(4):
-            x = 300 + i * 400
-            # Estas podrían colgar del techo
-            spikes.append({'x': x, 'y': 50, 'width': 35, 'height': 40})
+        # 2. ZONA DE GENERACIÓN
+        start_generation = safe_zone
+        end_generation = width - 200  # Espinas MUY cerca de la meta
+        generation_width = end_generation - start_generation
+        
+        # 3. DIVIDIR EN ZONAS - Más densidad
+        num_zones = 15  # Más zonas que desert (vs 12)
+        zone_width = generation_width // num_zones
+        
+        # 4. ESPINAS EN EL SUELO - Muy frecuentes
+        for zone in range(num_zones):
+            zone_start = start_generation + (zone * zone_width)
+            zone_end = zone_start + zone_width
+            
+            # DIFÍCIL: 60% probabilidad (vs 45% desert, 25% grass)
+            if random.random() < 0.60:
+                x = random.randint(zone_start + 25, zone_end - 25)
+                
+                spikes.append({
+                    'x': x,
+                    'y': height - 80,
+                    'width': 35,   # Más delgados (más difíciles de ver/evitar)
+                    'height': 35   # Más altos
+                })
+        
+        # 5. ZONAS DE PELIGRO EXTREMO
+        # 4 zonas (vs 3 desert, 2 grass)
+        if num_zones >= 5:
+            danger_zones = random.sample(
+                range(2, num_zones - 1),
+                min(4, num_zones - 3)
+            )
+            
+            for danger_zone in danger_zones:
+                zone_start = start_generation + (danger_zone * zone_width)
+                
+                # DIFÍCIL: 4-6 espinas juntas (vs 3-4 desert, 2-3 grass)
+                num_spikes_in_danger = random.randint(4, 6)
+                
+                for i in range(num_spikes_in_danger):
+                    spikes.append({
+                        'x': zone_start + (i * 45) + 30,
+                        'y': height - 80,
+                        'width': 35,
+                        'height': 35
+                    })
+        
+        # 6. ESTALACTITAS (espinas colgando del techo) - Feature único del hielo
+        num_stalactites = random.randint(8, 12)  # Muchas
+        
+        for _ in range(num_stalactites):
+            x = random.randint(start_generation, end_generation)
+            
+            # Cuelgan del techo (parte superior de la pantalla)
+            spikes.append({
+                'x': x,
+                'y': 30,  # Cerca del techo
+                'width': 30,
+                'height': random.randint(60, 100),  # Altura variable (cuelgan)
+                'hanging': True  # Flag para dibujar invertido
+            })
+        
+        # 7. ESPINAS FLOTANTES EN PLATAFORMAS - Más que desert
+        num_platform_spikes = random.randint(4, 6)  # vs 2-3 desert
+        
+        for _ in range(num_platform_spikes):
+            spike_x = random.randint(
+                start_generation + 200,
+                end_generation - 200
+            )
+            
+            # Altura aleatoria flotante
+            spike_y = random.randint(
+                height - 450,  # Más alto que desert
+                height - 150
+            )
+            
+            spikes.append({
+                'x': spike_x,
+                'y': spike_y,
+                'width': 35,
+                'height': 35
+            })
+        
+        # 8. CAMPOS DE ESPINAS (áreas grandes llenas) - Feature extremo
+        # 2 áreas grandes con muchas espinas
+        num_spike_fields = 2
+        field_zones = random.sample(
+            range(3, num_zones - 3),
+            min(num_spike_fields, num_zones - 6)
+        )
+        
+        for field_zone in field_zones:
+            field_start = start_generation + (field_zone * zone_width)
+            field_width = zone_width * 2  # Ocupa 2 zonas
+            
+            # Llenar con espinas cada 60px
+            num_spikes_in_field = field_width // 60
+            
+            for i in range(num_spikes_in_field):
+                spikes.append({
+                    'x': field_start + (i * 60) + 20,
+                    'y': height - 80,
+                    'width': 35,
+                    'height': 35
+                })
         
         return spikes
     
+    def add_goal(self, width, height):
+        """Meta del hielo - Iglú o portal al final"""
+        goal = {
+            'x': width - 100,
+            'y': height - 130,
+            'width': 60,
+            'height': 80,
+            'type': 'igloo'  # Tipo específico del hielo
+        }
+        return goal
+    
     def add_special_features(self, world_data, width, height):
-        """El hielo podría tener física resbaladiza"""
-        world_data['slippery'] = True  # Flag para implementar física resbaladiza
+        """Añade física resbaladiza y música del hielo"""
+        # Música épica/intensa para nivel difícil
+        world_data['music'] = WORLD_MUSIC_PATH + 'ice_theme.mp3'
+        
+        # FEATURE PRINCIPAL: Física resbaladiza
+        world_data['slippery'] = True  # Todas las superficies son resbaladizas
+        world_data['friction'] = 0.3   # Coeficiente bajo de fricción (vs 1.0 normal)
+        
+        # Features adicionales del hielo (para futuro):
+        # - Nieve cayendo que reduce visibilidad
+        # - Viento helado que empuja al jugador
+        # - Plataformas que se rompen después de pisarlas
+        world_data['snowfall'] = True  # Flag para efecto de nieve
+        world_data['breaking_platforms'] = True  # Flag para plataformas que se rompen
