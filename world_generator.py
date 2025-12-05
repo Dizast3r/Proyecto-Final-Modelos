@@ -16,12 +16,14 @@ CHECKPOINT_SAFE_RADIUS = 250  # Radio de exclusión alrededor de checkpoints
 MIN_VERTICAL_SPACING = 80  # Espacio mínimo vertical entre plataformas cercanas
 MIN_HORIZONTAL_SPACING = 100  # Espacio mínimo horizontal si están en alturas similares
 
-ENEMY_SPAWN_CHANCE = 0.35  # 35% probabilidad por plataforma
-ENEMY_SPAWN_CHANCE_GROUND = 0.20  # 20% probabilidad en el suelo
+ENEMY_SPAWN_CHANCE = 0.8
+ENEMY_SPAWN_CHANCE_GROUND = 0.8  
 
 POWERUP_MIN_DISTANCE_CHECKPOINT = 150
 POWERUP_MIN_DISTANCE_GOAL = 250
 POWERUP_MIN_DISTANCE_ENEMY = 120
+POWERUP_MIN_DISTANCE_SPIKE_X = 150
+POWERUP_MIN_DISTANCE_SPIKE_Y = 120
 POWERUP_MIN_DISTANCE_POWERUP = 200
 POWERUP_SAFE_ZONE = 600
 
@@ -53,12 +55,13 @@ class WorldGenerator(ABC):
         
         # PowerUps AL FINAL
         world_data['powerups'] = self.add_powerups(
-            width, 
-            height, 
+            width,
+            height,
             world_data['platforms'],
             world_data['checkpoints'],
             world_data['goal'],
-            world_data['enemies']
+            world_data['enemies'],
+            world_data['spikes']      # ← NUEVO
         )
         
         self.add_special_features(world_data, width, height)
@@ -101,7 +104,7 @@ class WorldGenerator(ABC):
         """Retorna el tipo de PowerUp que este mundo puede generar"""
         pass
     
-    def add_powerups(self, width, height, platforms, checkpoints, goal, enemies):
+    def add_powerups(self, width, height, platforms, checkpoints, goal, enemies, spikes):
         """
         Genera PowerUps en posiciones válidas
         El tipo específico lo decide cada mundo con get_powerup_type()
@@ -185,6 +188,20 @@ class WorldGenerator(ABC):
             
             if too_close_powerup:
                 continue
+
+            # === VALIDACIÓN 4: No cerca de espinas (spikes) ===
+            too_close_spike = False
+            for spike in spikes:
+                # spike es un dict {'x','y','width','height'}
+                dist_x = abs(x - spike['x'])
+                dist_y = abs(y - spike['y'])
+                # Interpretación de "al frente": muy cerca horizontalmente y a una altura similar
+                if dist_x < POWERUP_MIN_DISTANCE_SPIKE_X and dist_y < POWERUP_MIN_DISTANCE_SPIKE_Y:
+                    too_close_spike = True
+                    break
+
+            if too_close_spike:
+                continue
             
             # === VALIDACIONES PASADAS - Obtener tipo del mundo ===
             powerup_type = self.get_powerup_type()
@@ -202,97 +219,109 @@ class WorldGenerator(ABC):
 
     
     def add_enemies(self, width, height, platforms, checkpoints, goal):
-        """Genera enemigos sobre plataformas (implementación común para todos)"""
+        """
+        Genera enemigos sobre plataformas (incluyendo el suelo).
+        Implementación común para todos los mundos.
+        """
+        import random
+
         enemies = []
-        
-        # 1. ZONA SEGURA - No spawnear enemigos cerca del inicio
+
+        # Zona segura desde el inicio: primeros 500 px
         safe_zone_x = 500
-        
-        # 2. REVISAR TODAS LAS PLATAFORMAS
+
+        # Radio "seguro" alrededor de checkpoints y goal
+        checkpoint_safe_radius_x = 200
+        checkpoint_safe_radius_y = 150
+        goal_safe_radius_x = 300
+        goal_safe_radius_y = 150
+
+        # Distancia mínima entre enemigos
+        min_enemy_distance = 100
+
         for platform in platforms:
-            platform_x = platform['x']
-            platform_y = platform['y']
-            platform_width = platform['width']
-            platform_height = platform['height']
-            
-            # === VALIDACIÓN 1: No en zona segura ===
-            if platform_x < safe_zone_x:
+            px = platform['x']
+            py = platform['y']
+            pw = platform['width']
+            ph = platform['height']
+
+            # --- 1) Plataforma suficientemente ancha ---
+            if pw < 80:
                 continue
-            
-            # === VALIDACIÓN 2: Plataforma suficientemente grande ===
-            if platform_width < 80:
+
+            # --- 2) La plataforma NO debe quedar totalmente dentro de la zona segura ---
+            platform_right = px + pw
+            if platform_right <= safe_zone_x:
+                # Toda la plataforma está antes (o justo) del final de la zona segura
                 continue
-            
-            # === VALIDACIÓN 3: Probabilidad según tipo de superficie ===
-            is_ground = (platform_y >= height - 60)
-            
+
+            # --- 3) Determinar si es el suelo ---
+            is_ground = (py >= height - 60)
+
+            # --- 4) Probabilidad según tipo de plataforma ---
             if is_ground:
-                current_probability = ENEMY_SPAWN_CHANCE_GROUND  # ← USO DE CONSTANTE
+                current_probability = ENEMY_SPAWN_CHANCE_GROUND
             else:
-                current_probability = ENEMY_SPAWN_CHANCE  # ← USO DE CONSTANTE
-            
-            # === VALIDACIÓN 4: Probabilidad de spawn ===
+                current_probability = ENEMY_SPAWN_CHANCE
+
             if random.random() > current_probability:
                 continue
-            
-            # === VALIDACIÓN 5: No cerca de checkpoints ===
-            too_close_to_checkpoint = False
-            checkpoint_safe_radius = 200
-            
-            for checkpoint in checkpoints:
-                distance_x = abs(platform_x - checkpoint['x'])
-                distance_y = abs(platform_y - checkpoint['y'])
-                
-                if distance_x < checkpoint_safe_radius and distance_y < 150:
-                    too_close_to_checkpoint = True
-                    break
-            
-            if too_close_to_checkpoint:
-                continue
-            
-            # === VALIDACIÓN 6: No cerca de la meta ===
-            if goal:
-                goal_safe_radius = 300
-                distance_to_goal_x = abs(platform_x - goal['x'])
-                distance_to_goal_y = abs(platform_y - goal['y'])
-                
-                if distance_to_goal_x < goal_safe_radius and distance_to_goal_y < 150:
-                    continue
-            
-            # === VALIDACIÓN 7: No muy cerca del borde de la plataforma ===
+
+            # --- 5) Elegir un rango válido de X para spawnear (respetando zona segura y márgenes) ---
             margin = 40
-            available_width = platform_width - (2 * margin)
-            
-            if available_width < 40:
+            # El mínimo X es el máximo entre:
+            # - inicio de la plataforma + margen
+            # - final de la zona segura + margen
+            min_x = max(px + margin, safe_zone_x + margin)
+            max_x = px + pw - margin
+
+            if max_x <= min_x:
+                # No hay espacio útil después de aplicar zona segura y márgenes
                 continue
-            
-            # Calcular posición del enemigo
-            enemy_x = platform_x + margin + random.randint(0, int(available_width))
-            enemy_y = platform_y - 50
-            
-            # === VALIDACIÓN 8: No superpuesto con otros enemigos ===
-            too_close_to_other_enemy = False
-            min_distance_between_enemies = 100
-            
-            for existing_enemy in enemies:
-                distance = abs(enemy_x - existing_enemy['x'])
-                if distance < min_distance_between_enemies:
-                    too_close_to_other_enemy = True
+
+            enemy_x = random.randint(int(min_x), int(max_x))
+            # Colocar al enemigo sobre la plataforma (altura fija 50 px aprox.)
+            enemy_y = py - 50
+
+            # --- 6) No cerca de checkpoints ---
+            too_close_checkpoint = False
+            for checkpoint in checkpoints:
+                dx = abs(enemy_x - checkpoint['x'])
+                dy = abs(enemy_y - checkpoint['y'])
+                if dx < checkpoint_safe_radius_x and dy < checkpoint_safe_radius_y:
+                    too_close_checkpoint = True
                     break
-            
-            if too_close_to_other_enemy:
+            if too_close_checkpoint:
                 continue
-            
-            # === TODAS LAS VALIDACIONES PASADAS ===
+
+            # --- 7) No cerca de la meta ---
+            if goal:
+                dx_goal = abs(enemy_x - goal['x'])
+                dy_goal = abs(enemy_y - goal['y'])
+                if dx_goal < goal_safe_radius_x and dy_goal < goal_safe_radius_y:
+                    continue
+
+            # --- 8) No demasiado cerca de otros enemigos ya generados ---
+            too_close_other_enemy = False
+            for e in enemies:
+                dx = abs(enemy_x - e['x'])
+                if dx < min_enemy_distance:
+                    too_close_other_enemy = True
+                    break
+            if too_close_other_enemy:
+                continue
+
+            # --- 9) Añadir enemigo ---
             enemy = {
                 'x': enemy_x,
                 'y': enemy_y,
-                'width': 40,
-                'height': 50
+                'width': 40,   # coincide con ENEMY_WIDTH en game.py
+                'height': 50   # coincide con ENEMY_HEIGHT en game.py
             }
             enemies.append(enemy)
-        
+
         return enemies
+
 
     
     def add_goal(self, width, height):

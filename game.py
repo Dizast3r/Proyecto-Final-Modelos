@@ -20,6 +20,15 @@ SPRITE_EXTENSION = '.png'
 SPRITE_COUNT = 9
 ANIMATION_PLAYER_SPEED = 0.30
 
+PLAYER_WIDTH = 40
+PLAYER_HEIGHT = 60
+
+ENEMY_WIDTH = 40
+ENEMY_HEIGHT = 50
+
+POWERUP_WIDTH = ENEMY_WIDTH
+POWERUP_HEIGHT = ENEMY_HEIGHT
+
 
 SPRITE_ENEMY_PATH = 'Assets/EnemySprites/'
 ENEMY_SPRITE_COUNT = 3
@@ -28,14 +37,21 @@ ENEMY_SPRITE_EXTENSION = '.png'
 ENEMY_SPRITE_DEATH = 'SpriteDeath.png'
 ANIMATION_ENEMY_SPEED = 10
 
+POWERUP_SPRITE_PATH = 'Assets/PowerUpSprites/'
+POWERUP_SPRITE_EXTENSION = '.png'
+
+POWERUP_SPRITE_SPEED_NAME = 'SpriteSpeed'
+POWERUP_SPRITE_JUMP_NAME  = 'SpriteJump'
+POWERUP_SPRITE_LIFE_NAME  = 'SpriteLife'
+
 class Player:
     """Clase del jugador que puede guardar y restaurar su estado"""
     
     def __init__(self, x, y):
         self.x = x
         self.y = y
-        self.width = 40
-        self.height = 60
+        self.width = PLAYER_WIDTH
+        self.height = PLAYER_HEIGHT
         self.velocity_x = 0
         self.velocity_y = 0
         self.speed = DEFAULT_SPEED
@@ -200,8 +216,8 @@ class Enemy:
     def __init__(self, x, y):
         self.x = x
         self.y = y
-        self.width = 40
-        self.height = 50  # Más pequeño que jugador (60)
+        self.width = ENEMY_WIDTH
+        self.height = ENEMY_HEIGHT
         
         # Física
         self.velocity_x = -2  # Velocidad lenta, negativa = izquierda
@@ -579,41 +595,97 @@ class Goal:
 
 
 class PowerUP(ABC):
-    def __init__(self, x, y, width, height):
+    def __init__(self, x, y, sprite_name):
         self.x = x
         self.y = y
-        self.width = width
-        self.height = height
+        self.width = POWERUP_WIDTH
+        self.height = POWERUP_HEIGHT
+        
+        self.collected = False
+        self.image = None
+
+        # Cargar sprite único, al estilo Player/Enemy
+        sprite_file = f"{POWERUP_SPRITE_PATH}{sprite_name}{POWERUP_SPRITE_EXTENSION}"
+        try:
+            img = pygame.image.load(sprite_file)
+            img = pygame.transform.scale(img, (self.width, self.height))
+            self.image = img
+        except pygame.error as e:
+            print(f"Error cargando PowerUp {sprite_file}: {e}")
+            self.image = None
 
     @abstractmethod
     def draw(self, screen, camera_x):
+        """Dibuja el PowerUp (coordenadas con cámara)"""
         pass
     
     @abstractmethod
     def power(self, player):
+        """Aplica el efecto concreto al jugador"""
         pass
+
+    # Helper común para las subclases
+    def _draw_base(self, screen, camera_x):
+        if self.collected:
+            return
+        
+        screen_x = self.x - camera_x
+        if self.image:
+            screen.blit(self.image, (screen_x, self.y))
+        else:
+            # Fallback: rectángulo amarillo si falla el sprite
+            pygame.draw.rect(
+                screen, (255, 255, 0),
+                (screen_x, self.y, self.width, self.height)
+            )
+
 
 DEFAULT_SPEED_INCREASE = 3
-class PowerSpeedIncrease(PowerUP):
-    def draw(self, screen):
-        pass
 
-    def power(player):
-        player.speed_increase(DEFAULT_SPEED_INCREASE)
+class PowerSpeedIncrease(PowerUP):
+    def __init__(self, x, y):
+        super().__init__(
+            x, y,
+            POWERUP_SPRITE_SPEED_NAME
+        )
+
+    def draw(self, screen, camera_x):
+        self._draw_base(screen, camera_x)
+
+    def power(self, player):
+        """Incrementa la velocidad del jugador"""
+        player.increase_speed(DEFAULT_SPEED_INCREASE)
+
 
 DEFAULT_JUMP_POWER_INCREASE = 2
+
 class PowerJumpPowerIncrease(PowerUP):
-    def draw(self, screen):
-        pass
+    def __init__(self, x, y):
+        super().__init__(
+            x, y,
+            POWERUP_SPRITE_JUMP_NAME
+        )
+
+    def draw(self, screen, camera_x):
+        self._draw_base(screen, camera_x)
 
     def power(self, player):
+        """Incrementa la potencia de salto del jugador"""
         player.increase_jump_power(DEFAULT_JUMP_POWER_INCREASE)
 
+
 class PowerExtraLife(PowerUP):
-    def draw(self, screen):
-        pass
+    def __init__(self, x, y):
+        super().__init__(
+            x, y,
+            POWERUP_SPRITE_LIFE_NAME
+        )
+
+    def draw(self, screen, camera_x):
+        self._draw_base(screen, camera_x)
 
     def power(self, player):
+        """Otorga una vida extra"""
         player.get_life()
         
 
@@ -643,6 +715,7 @@ class Game:
         self.platforms = []
         self.spikes = []
         self.enemies = []
+        self.powerups = []
         self.checkpoints = []
         self.colors = {}
         self.world_name = ""
@@ -703,6 +776,27 @@ class Game:
             enemy = Enemy(e['x'], e['y'])
             self.enemies.append(enemy)
         
+        for p in world_data.get('powerups', []):
+            p_type = p.get('type', 'speed')  # 'speed', 'jump', 'life'
+            x = p['x']
+            y = p['y']
+
+            if p_type == 'speed':
+                pu = PowerSpeedIncrease(x, y)
+            elif p_type == 'jump':
+                pu = PowerJumpPowerIncrease(x, y)
+            elif p_type == 'life':
+                pu = PowerExtraLife(x, y)
+            else:
+                # fallback genérico por si llega un tipo raro
+                pu = PowerSpeedIncrease(x, y)
+
+            # Marcar atributo collected en False, si la clase base aún no lo tiene
+            if not hasattr(pu, 'collected'):
+                pu.collected = False
+
+            self.powerups.append(pu)
+        
         # Resetear jugador
         self.player = Player(100, 100)
         self.checkpoint_manager.clear_checkpoints()
@@ -725,6 +819,18 @@ class Game:
             if player_rect.colliderect(self.goal.get_rect()):
                 self.goal.activate()
                 print(f"\n🎉 ¡META ALCANZADA! Completaste {self.world_name}")
+
+        for powerup in self.powerups:
+            # Si ya fue recogido, lo ignoramos
+            if getattr(powerup, 'collected', False):
+                continue
+
+            powerup_rect = pygame.Rect(powerup.x, powerup.y,
+                                    powerup.width, powerup.height)
+            if player_rect.colliderect(powerup_rect):
+                # Aplicar efecto y marcar como recogido
+                powerup.power(self.player)
+                powerup.collected = True
 
         for enemy in self.enemies:
             if not enemy.alive:
@@ -791,6 +897,9 @@ class Game:
         # Dibujar espinas CON cámara
         for spike in self.spikes:
             spike.draw(self.screen, self.camera_x)
+
+        for powerup in self.powerups:
+            powerup.draw(self.screen, self.camera_x)
         
         # Dibujar checkpoints CON cámara
         for checkpoint in self.checkpoints:
@@ -844,6 +953,7 @@ class Game:
         
         #Eliminar enemigos muertos (después de 2 segundos)
         self.enemies = [enemy for enemy in self.enemies if not enemy.should_be_removed()]
+        self.powerups = [p for p in self.powerups if not getattr(p, 'collected', False)]
         self.check_collisions()
         self.update_camera()
     
