@@ -22,25 +22,32 @@ class WorldGenerator(ABC):
             'platforms': [],
             'spikes': [],
             'checkpoints': [],
+            'powerups': [],      # NUEVO
+            'enemies': [],       # NUEVO
+            'goal': None,        # NUEVO
             'colors': {},
-            'name': ''
+            'name': '',
+            'music': None        # NUEVO
         }
         
-        # Pasos del algoritmo (algunos abstractos, otros con implementación por defecto)
+        # Pasos del algoritmo en orden
         world_data['colors'] = self.define_colors()
         world_data['name'] = self.get_world_name()
         world_data['platforms'] = self.generate_platforms(width, height)
         world_data['spikes'] = self.generate_hazards(width, height)
         world_data['checkpoints'] = self.generate_checkpoints(width, height)
+        world_data['powerups'] = self.add_powerups(width, height)      # NUEVO
+        world_data['enemies'] = self.add_enemies(width, height)        # NUEVO
+        world_data['goal'] = self.add_goal(width, height)              # NUEVO
         
-        # Hook method (opcional de sobrescribir)
+        # Hook method para características especiales
         self.add_special_features(world_data, width, height)
         
         return world_data
     
     @abstractmethod
     def define_colors(self):
-        """Define los colores del mundo (debe implementarse en subclases)"""
+        """Define los colores del mundo"""
         pass
     
     @abstractmethod
@@ -57,17 +64,34 @@ class WorldGenerator(ABC):
     def generate_hazards(self, width, height):
         """Genera los obstáculos/trampas del mundo"""
         pass
-
+    
     def generate_checkpoints(self, width, height):
         """Genera checkpoints (implementación por defecto)"""
         checkpoints = []
         for i in range(1, NUMBER_OF_CHECKPOINTS_PER_LEVEL + 1):
-            checkpoints.append({'x': i * SPACE_BETWEEN_CHECKPOINTS, 'y': height - 150})
+            checkpoints.append({
+                'x': i * SPACE_BETWEEN_CHECKPOINTS, 
+                'y': height - 150
+            })
         return checkpoints
     
-    def add_special_features(self, world_data, width, height):
-        """Hook method - puede ser sobrescrito para añadir características especiales"""
+    def add_powerups(self, width, height):
+        """Genera power-ups (implementación por defecto - vacía por ahora)"""
+        return []
+    
+    def add_enemies(self, width, height):
+        """Genera enemigos (implementación por defecto - vacía por ahora)"""
+        return []
+    
+    @abstractmethod
+    def add_goal(self, width, height):
+        """Genera la meta del nivel (cada mundo debe implementarlo)"""
         pass
+    
+    def add_special_features(self, world_data, width, height):
+        """Hook method - características únicas del mundo (música, física, etc)"""
+        pass
+
 
 
 class GrassWorldGenerator(WorldGenerator):
