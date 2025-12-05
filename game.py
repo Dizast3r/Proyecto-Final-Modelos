@@ -284,11 +284,11 @@ class PowerUP(ABC):
         self.height = height
 
     @abstractmethod
-    def draw(self, screen):
+    def draw(self, screen, camera_x):
         pass
     
     @abstractmethod
-    def power(player):
+    def power(self, player):
         pass
 
 DEFAULT_SPEED_INCREASE = 3
@@ -304,14 +304,14 @@ class PowerJumpPowerIncrease(PowerUP):
     def draw(self, screen):
         pass
 
-    def power(player):
+    def power(self, player):
         player.increase_jump_power(DEFAULT_JUMP_POWER_INCREASE)
 
 class PowerExtraLife(PowerUP):
     def draw(self, screen):
         pass
 
-    def power(player):
+    def power(self, player):
         player.get_life()
         
 
