@@ -275,6 +275,81 @@ class Checkpoint:
     def activate(self):
         """Activa el checkpoint"""
         self.activated = True
+    
+class Goal:
+    """Clase para la meta del nivel"""
+    
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.width = 60
+        self.height = 80
+        self.reached = False
+        
+        # Colores para el diseño
+        self.base_color = (100, 100, 100)      # Gris para base
+        self.pole_color = (255, 255, 255)      # Blanco para palo
+        self.ball_color = (0, 0, 0)            # Negro para bola
+    
+    def draw(self, screen, camera_x):
+        """Dibuja la meta: base cuadrada + palo blanco + bola negra"""
+        screen_x = self.x - camera_x
+        
+        # Color cambia si ya se alcanzó
+        if self.reached:
+            base_color = (50, 255, 50)    # Verde brillante
+            pole_color = (200, 255, 200)  # Blanco verdoso
+            ball_color = (0, 200, 0)      # Verde oscuro
+        else:
+            base_color = self.base_color
+            pole_color = self.pole_color
+            ball_color = self.ball_color
+        
+        # 1. BASE CUADRADA (soporte)
+        base_width = 40
+        base_height = 15
+        base_x = screen_x + (self.width - base_width) // 2  # Centrada
+        base_y = self.y + self.height - base_height
+        
+        pygame.draw.rect(screen, base_color, 
+                        (base_x, base_y, base_width, base_height))
+        # Borde de la base
+        pygame.draw.rect(screen, (50, 50, 50), 
+                        (base_x, base_y, base_width, base_height), 2)
+        
+        # 2. PALO BLANCO ALTO
+        pole_width = 8
+        pole_height = self.height - base_height - 12  # Espacio para la bola
+        pole_x = screen_x + (self.width - pole_width) // 2  # Centrado
+        pole_y = self.y + 12  # Desde arriba (después de la bola)
+        
+        pygame.draw.rect(screen, pole_color, 
+                        (pole_x, pole_y, pole_width, pole_height))
+        # Borde del palo
+        pygame.draw.rect(screen, (200, 200, 200), 
+                        (pole_x, pole_y, pole_width, pole_height), 1)
+        
+        # 3. BOLA NEGRA EN EL TOPE
+        ball_radius = 10
+        ball_center_x = int(screen_x + self.width // 2)
+        ball_center_y = int(self.y + ball_radius)
+        
+        pygame.draw.circle(screen, ball_color, 
+                          (ball_center_x, ball_center_y), ball_radius)
+        # Brillo en la bola (efecto 3D)
+        highlight_offset = 3
+        pygame.draw.circle(screen, (255, 255, 255), 
+                          (ball_center_x - highlight_offset, 
+                           ball_center_y - highlight_offset), 3)
+    
+    def get_rect(self):
+        """Retorna el rectángulo de colisión"""
+        return pygame.Rect(self.x, self.y, self.width, self.height)
+    
+    def activate(self):
+        """Marca la meta como alcanzada"""
+        self.reached = True
+
 
 class PowerUP(ABC):
     def __init__(self, x, y, width, height):
