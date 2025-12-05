@@ -14,6 +14,12 @@ DEFAULT_LIVES = 3
 MAX_SPEED = 30
 MAX_JUMP_POWER = 28
 
+SPRITE_PLAYER_PATH = 'assets/PlayerSprites/'
+SPRITE_PREFIX = 'Sprite'
+SPRITE_EXTENSION = '.png'
+SPRITE_COUNT = 9
+ANIMATION_PLAYER_SPEED = 0.30
+
 class Player:
     """Clase del jugador que puede guardar y restaurar su estado"""
     
@@ -30,18 +36,40 @@ class Player:
         self.on_ground = False
         self.lives = DEFAULT_LIVES
         
-        # Aquí puedes cargar tu imagen del personaje
-        # self.image = pygame.image.load('player.png')
-        # Por ahora usamos un rectángulo
-        self.image = None
+        # Cargar sprites
+        self.sprites = []
+        for i in range(1, SPRITE_COUNT + 1):
+            try:
+                sprite_file = f'{SPRITE_PLAYER_PATH}{SPRITE_PREFIX}{i}{SPRITE_EXTENSION}'
+                img = pygame.image.load(sprite_file)
+                img = pygame.transform.scale(img, (self.width, self.height))
+                self.sprites.append(img)
+            except pygame.error as e:
+                print(f"Error cargando {sprite_file}: {e}")
+
+        # Sprite idle (quieto) - primer sprite
+        self.idle_sprite = self.sprites[0] if self.sprites else None
+        
+        # Control de animación
+        self.current_sprite = 0
+        self.animation_speed = ANIMATION_PLAYER_SPEED
+        self.animation_counter = 0
+        
+        # Dirección (para flip horizontal)
+        self.facing_right = True
+        
+        # Imagen actual
+        self.image = self.idle_sprite
     
     def move_left(self):
         """Movimiento a la izquierda"""
         self.velocity_x = -self.speed
+        self.facing_right = False
     
     def move_right(self):
         """Movimiento a la derecha"""
         self.velocity_x = self.speed
+        self.facing_right = True
     
     def stop(self):
         """Detener movimiento horizontal"""
@@ -86,11 +114,27 @@ class Player:
                 elif self.velocity_y < 0:
                     self.y = platform['y'] + platform['height']
                     self.velocity_y = 0
+
+        # Actualizar animación
+        if self.sprites:
+            if self.velocity_x != 0:  # Solo animar cuando se mueve
+                self.animation_counter += self.animation_speed
+                if self.animation_counter >= 1:
+                    self.animation_counter = 0
+                    self.current_sprite = (self.current_sprite + 1) % len(self.sprites)
+                    self.image = self.sprites[self.current_sprite]
+            else:  # Quieto - mostrar sprite idle
+                self.image = self.idle_sprite
+                self.current_sprite = 0
+                self.animation_counter = 0
     
     def draw(self, screen):
         """Dibuja el jugador"""
         if self.image:
-            screen.blit(self.image, (self.x, self.y))
+            img = self.image
+            if not self.facing_right:  # Voltear si mira a la izquierda
+                img = pygame.transform.flip(self.image, True, False)
+            screen.blit(img, (self.x, self.y))
         else:
             # Dibujar rectángulo temporal (aquí irá tu sprite)
             pygame.draw.rect(screen, (255, 0, 0), 
@@ -100,6 +144,7 @@ class Player:
                              (int(self.x + 15), int(self.y + 20)), 3)
             pygame.draw.circle(screen, (255, 255, 255), 
                              (int(self.x + 25), int(self.y + 20)), 3)
+            
     
     def create_memento(self):
         """Crea un memento con el estado actual"""
@@ -122,7 +167,8 @@ class Player:
     
     def die(self):
         """El jugador muere"""
-        self.lives -= 1
+        if self.lives >= 1:
+            self.lives -= 1
         return self.lives > 0
     
     def get_life(self):
@@ -133,7 +179,7 @@ class Player:
         if new_speed <= MAX_SPEED:
             self.speed = new_speed
     
-    def increse_jump_power(self, jump_power_increase):
+    def increase_jump_power(self, jump_power_increase):
         new_jump_power = self.jump_power + jump_power_increase
         if new_jump_power <= MAX_JUMP_POWER:
             self.jump_power = new_jump_power
@@ -222,7 +268,7 @@ class Checkpoint:
         self.activated = True
 
 class PowerUP(ABC):
-    def __init__(self, x, y, width, height, color):
+    def __init__(self, x, y, width, height):
         self.x = x
         self.y = y
         self.width = width
@@ -346,7 +392,7 @@ class Game:
                         self.player.y = 100
                         self.player.velocity_x = 0
                         self.player.velocity_y = 0
-                else:
+                elif self.running:
                     # Game Over
                     print("Game Over!")
                     self.running = False
