@@ -19,15 +19,18 @@ MIN_HORIZONTAL_SPACING = 100  # Espacio mínimo horizontal si están en alturas 
 ENEMY_SPAWN_CHANCE = 0.35  # 35% probabilidad por plataforma
 ENEMY_SPAWN_CHANCE_GROUND = 0.20  # 20% probabilidad en el suelo
 
+POWERUP_MIN_DISTANCE_CHECKPOINT = 150
+POWERUP_MIN_DISTANCE_GOAL = 250
+POWERUP_MIN_DISTANCE_ENEMY = 120
+POWERUP_MIN_DISTANCE_POWERUP = 200
+POWERUP_SAFE_ZONE = 600
+
 
 class WorldGenerator(ABC):
     """Clase abstracta que define el template method para generar mundos"""
     
     def generate_world(self, width, height):
-        """
-        TEMPLATE METHOD - Define el esqueleto del algoritmo
-        Este método no debe ser sobrescrito por las subclases
-        """
+        """TEMPLATE METHOD - Define el esqueleto del algoritmo"""
         world_data = {
             'platforms': [],
             'spikes': [],
@@ -40,25 +43,28 @@ class WorldGenerator(ABC):
             'music': None        
         }
         
-        # Pasos del algoritmo en orden
         world_data['colors'] = self.define_colors()
         world_data['name'] = self.get_world_name()
-        world_data['checkpoints'] = self.generate_checkpoints(width, height)  # PRIMERO
-        world_data['platforms'] = self.generate_platforms(width, height, world_data['checkpoints'])  # Pasa checkpoints
-        world_data['spikes'] = self.generate_hazards(width, height, world_data['platforms'], world_data['checkpoints'])  # Pasa ambos
-        world_data['powerups'] = self.add_powerups(width, height)
-        world_data['enemies'] = self.add_enemies(
+        world_data['checkpoints'] = self.generate_checkpoints(width, height)
+        world_data['platforms'] = self.generate_platforms(width, height, world_data['checkpoints'])
+        world_data['spikes'] = self.generate_hazards(width, height, world_data['platforms'], world_data['checkpoints'])
+        world_data['goal'] = self.add_goal(width, height)
+        world_data['enemies'] = self.add_enemies(width, height, world_data['platforms'], world_data['checkpoints'], world_data['goal'])
+        
+        # PowerUps AL FINAL
+        world_data['powerups'] = self.add_powerups(
             width, 
             height, 
             world_data['platforms'],
             world_data['checkpoints'],
-            world_data['goal']
+            world_data['goal'],
+            world_data['enemies']
         )
-        world_data['goal'] = self.add_goal(width, height)
         
         self.add_special_features(world_data, width, height)
         
         return world_data
+
     
     @abstractmethod
     def define_colors(self):
@@ -90,9 +96,110 @@ class WorldGenerator(ABC):
             })
         return checkpoints
     
-    def add_powerups(self, width, height):
-        """Genera power-ups (implementación por defecto - vacía por ahora)"""
-        return []
+    @abstractmethod
+    def get_powerup_type(self):
+        """Retorna el tipo de PowerUp que este mundo puede generar"""
+        pass
+    
+    def add_powerups(self, width, height, platforms, checkpoints, goal, enemies):
+        """
+        Genera PowerUps en posiciones válidas
+        El tipo específico lo decide cada mundo con get_powerup_type()
+        """
+        powerups = []
+        
+        # 1. NÚMERO DE POWERUPS basado en tamaño del mundo
+        num_powerups = (width // 1000) + random.randint(2, 4)
+        
+        attempts = 0
+        max_attempts = num_powerups * 15
+        
+        while len(powerups) < num_powerups and attempts < max_attempts:
+            attempts += 1
+            
+            # Posición X después de zona segura
+            x = random.randint(POWERUP_SAFE_ZONE, width - 200)
+            
+            # Decidir si va sobre plataforma o flotando
+            placement_type = random.choice(['on_platform', 'floating'])
+            
+            if placement_type == 'on_platform':
+                # Buscar plataforma cercana a X
+                suitable_platform = None
+                min_distance = float('inf')
+                
+                for platform in platforms:
+                    if platform['y'] < height - 100:  # No en el suelo
+                        distance = abs(platform['x'] - x)
+                        if distance < min_distance and distance < 300:
+                            min_distance = distance
+                            suitable_platform = platform
+                
+                if not suitable_platform:
+                    continue
+                
+                # Colocar encima de la plataforma
+                x = suitable_platform['x'] + suitable_platform['width'] // 2
+                y = suitable_platform['y'] - 40
+            else:
+                # Flotando
+                y = random.randint(height - 400, height - 150)
+            
+            # === VALIDACIÓN 1: No cerca de checkpoints ===
+            too_close_checkpoint = False
+            for checkpoint in checkpoints:
+                dist_x = abs(x - checkpoint['x'])
+                dist_y = abs(y - checkpoint['y'])
+                if dist_x < POWERUP_MIN_DISTANCE_CHECKPOINT and dist_y < 100:
+                    too_close_checkpoint = True
+                    break
+            
+            if too_close_checkpoint:
+                continue
+            
+            # === VALIDACIÓN 2: No cerca de goal ===
+            if goal:
+                dist_goal_x = abs(x - goal['x'])
+                dist_goal_y = abs(y - goal['y'])
+                if dist_goal_x < POWERUP_MIN_DISTANCE_GOAL and dist_goal_y < 150:
+                    continue
+            
+            # === VALIDACIÓN 3: No cerca de enemigos ===
+            too_close_enemy = False
+            for enemy in enemies:
+                dist = abs(x - enemy['x'])
+                if dist < POWERUP_MIN_DISTANCE_ENEMY:
+                    too_close_enemy = True
+                    break
+            
+            if too_close_enemy:
+                continue
+            
+            # === VALIDACIÓN 4: No cerca de otros powerups ===
+            too_close_powerup = False
+            for existing_powerup in powerups:
+                dist = abs(x - existing_powerup['x'])
+                if dist < POWERUP_MIN_DISTANCE_POWERUP:
+                    too_close_powerup = True
+                    break
+            
+            if too_close_powerup:
+                continue
+            
+            # === VALIDACIONES PASADAS - Obtener tipo del mundo ===
+            powerup_type = self.get_powerup_type()
+            
+            powerup = {
+                'x': x,
+                'y': y,
+                'width': 35,
+                'height': 35,
+                'type': powerup_type
+            }
+            powerups.append(powerup)
+        
+        return powerups
+
     
     def add_enemies(self, width, height, platforms, checkpoints, goal):
         """Genera enemigos sobre plataformas (implementación común para todos)"""
@@ -257,6 +364,17 @@ class WorldGenerator(ABC):
 
 class GrassWorldGenerator(WorldGenerator):
     """Generador de mundo de pasto (nivel fácil)"""
+
+    def get_powerup_type(self):
+        """Grass: PowerUps balanceados, énfasis en velocidad"""
+        rand = random.random()
+        if rand < 0.40:
+            return 'speed'
+        elif rand < 0.70:
+            return 'jump'
+        else:
+            return 'life'
+
     
     def define_colors(self):
         """Colores verdes y naturales"""
@@ -669,6 +787,17 @@ class GrassWorldGenerator(WorldGenerator):
 
 class DesertWorldGenerator(WorldGenerator):
     """Generador de mundo desértico (nivel medio)"""
+
+    def get_powerup_type(self):
+        """Desert: PowerUps de salto para superar obstáculos"""
+        rand = random.random()
+        if rand < 0.50:
+            return 'jump'
+        elif rand < 0.75:
+            return 'speed'
+        else:
+            return 'life'
+
     
     def define_colors(self):
         """Colores cálidos y áridos del desierto"""
@@ -1157,6 +1286,17 @@ class DesertWorldGenerator(WorldGenerator):
 
 class IceWorldGenerator(WorldGenerator):
     """Generador de mundo de hielo (nivel difícil)"""
+
+    def get_powerup_type(self):
+        """Ice: PowerUps de vida para zona difícil"""
+        rand = random.random()
+        if rand < 0.50:
+            return 'life'
+        elif rand < 0.75:
+            return 'speed'
+        else:
+            return 'jump'
+
     
     def define_colors(self):
         """Colores fríos y helados"""
