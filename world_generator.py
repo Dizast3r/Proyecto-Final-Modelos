@@ -456,38 +456,38 @@ class GrassWorldGenerator(WorldGenerator):
                     })
                     spike_placed = True
         
-        # 5. ZONAS DE PELIGRO (grupos de espinas) CON VALIDACIONES
-        if num_zones >= 3:
-            danger_zones = random.sample(range(2, num_zones - 1), min(2, num_zones - 3))
+        # 5. ZONAS DE PELIGRO - Grupos en el suelo
+        if num_zones >= 4:
+            # 2 zonas de peligro
+            danger_zones = random.sample(
+                range(2, num_zones - 1),
+                min(2, num_zones - 3)
+            )
             
             for danger_zone in danger_zones:
                 zone_start = start_generation + (danger_zone * zone_width)
-                
-                # Verificar que esta zona no está cerca de checkpoints
                 zone_center_x = zone_start + zone_width // 2
-                zone_center_y = ground_y - 30
+                zone_center_y = ground_y - 32
                 
                 if self.is_near_checkpoint(zone_center_x, zone_center_y, checkpoints, radius=200):
-                    continue  # Esta zona está cerca de un checkpoint, saltarla
+                    continue
                 
-                num_spikes_in_danger = random.randint(2, 3)
+                # CORREGIDO: MÁXIMO 2 espinas juntas (vs 2-3 antes)
+                num_spikes_in_danger = 2  # ← FIJO en 2
                 spikes_added = 0
                 
                 for i in range(num_spikes_in_danger):
-                    x = zone_start + (i * 55) + 50
-                    y = ground_y - 30
-                    spike_width = 40
-                    spike_height = 30
+                    x = zone_start + (spikes_added * 50) + 40
+                    y = ground_y - 32
+                    spike_width = 38
+                    spike_height = 32
                     
-                    # === VALIDACIÓN 1: No cerca de checkpoints (individual) ===
                     if self.is_near_checkpoint(x, y, checkpoints, radius=150):
                         continue
                     
-                    # === VALIDACIÓN 2: Sobre superficie ===
                     if not self.is_on_surface(x, y, spike_height, platforms, ground_y):
                         continue
                     
-                    # === VALIDACIÓN 3: No superpuesta ===
                     overlaps = False
                     for existing_spike in spikes:
                         if self.rectangles_overlap(
@@ -501,14 +501,14 @@ class GrassWorldGenerator(WorldGenerator):
                     if overlaps:
                         continue
                     
-                    # Añadir espina del grupo
                     spikes.append({
-                        'x': zone_start + (spikes_added * 55) + 50,
-                        'y': ground_y - 30,
+                        'x': x,
+                        'y': y,
                         'width': spike_width,
                         'height': spike_height
                     })
                     spikes_added += 1
+
         
         # 6. ESPINAS EN PLATAFORMAS (opcional para nivel fácil)
         # Seleccionar algunas plataformas al azar para poner espinas encima
@@ -559,9 +559,9 @@ class GrassWorldGenerator(WorldGenerator):
         """Genera la meta al final del mundo"""
         goal = {
             'x': width - 120,
-            'y': height - 130,
+            'y': height - 300,
             'width': 60,
-            'height': 80
+            'height': 250
         }
         return goal
 
@@ -569,12 +569,7 @@ class GrassWorldGenerator(WorldGenerator):
     def add_special_features(self, world_data, width, height):
         """Añade música y características especiales del mundo de pasto"""
         # Música relajada para nivel fácil
-        world_data['music'] = WORLD_MUSIC_PATH + 'grass_theme.mp3'  # Path a archivo de música
-        
-        # Podrías añadir más features aquí en el futuro:
-        # - Partículas de flores
-        # - Animación de pasto moviéndose
-        # - Nubes en el fondo
+        world_data['music'] = WORLD_MUSIC_PATH + 'grass_theme.mp3'
 
 
 
@@ -934,8 +929,9 @@ class DesertWorldGenerator(WorldGenerator):
                     })
                     spike_placed = True
         
-        # 5. ZONAS DE PELIGRO (grupos en el suelo)
+        # 5. ZONAS DE PELIGRO - Grupos en el suelo
         if num_zones >= 4:
+            # 3 zonas de peligro
             danger_zones = random.sample(
                 range(2, num_zones - 1),
                 min(3, num_zones - 3)
@@ -944,24 +940,24 @@ class DesertWorldGenerator(WorldGenerator):
             for danger_zone in danger_zones:
                 zone_start = start_generation + (danger_zone * zone_width)
                 zone_center_x = zone_start + zone_width // 2
-                zone_center_y = ground_y - 32
+                zone_center_y = ground_y - 35
                 
                 if self.is_near_checkpoint(zone_center_x, zone_center_y, checkpoints, radius=200):
                     continue
                 
-                num_spikes_in_danger = random.randint(3, 4)
+                # CORREGIDO: MÁXIMO 2 espinas juntas (vs 3-4 antes)
+                num_spikes_in_danger = 2  # ← FIJO en 2
                 spikes_added = 0
                 
                 for i in range(num_spikes_in_danger):
                     x = zone_start + (spikes_added * 50) + 40
-                    y = ground_y - 32  # EN EL SUELO
+                    y = ground_y - 35
                     spike_width = 38
-                    spike_height = 32
+                    spike_height = 35
                     
                     if self.is_near_checkpoint(x, y, checkpoints, radius=150):
                         continue
                     
-                    # Verificar que está en el suelo
                     if not self.is_on_surface(x, y, spike_height, platforms, ground_y):
                         continue
                     
@@ -985,6 +981,7 @@ class DesertWorldGenerator(WorldGenerator):
                         'height': spike_height
                     })
                     spikes_added += 1
+
         
         # 6. ESPINAS SOBRE PLATAFORMAS (NO flotantes, SOBRE plataformas)
         eligible_platforms = []
@@ -1062,10 +1059,10 @@ class DesertWorldGenerator(WorldGenerator):
     def add_goal(self, width, height):
         """Meta del desierto al final"""
         goal = {
-            'x': width - 110,
-            'y': height - 130,
+            'x': width - 120,
+            'y': height - 300,
             'width': 60,
-            'height': 80
+            'height': 250
         }
         return goal
 
@@ -1074,12 +1071,6 @@ class DesertWorldGenerator(WorldGenerator):
         """Añade música y características del desierto"""
         # Música de desierto (ritmo medio, atmosférica)
         world_data['music'] = WORLD_MUSIC_PATH + 'desert_theme.mp3'
-        
-        # Features especiales del desierto (para futuro):
-        # - Tormentas de arena periódicas
-        # - Viento que afecta el salto
-        # - Calor que reduce velocidad gradualmente
-        world_data['wind_effect'] = True  # Flag para implementar viento
 
 
 
@@ -1376,8 +1367,8 @@ class IceWorldGenerator(WorldGenerator):
                 if self.is_near_checkpoint(zone_center_x, zone_center_y, checkpoints, radius=200):
                     continue
                 
-                # DIFÍCIL: 5-7 espinas juntas (vs 4-6 antes, 3-4 Desert, 2-3 Grass)
-                num_spikes_in_danger = random.randint(5, 7)
+                # CORREGIDO: MÁXIMO 2 espinas juntas (vs 5-7 antes)
+                num_spikes_in_danger = 2  # ← FIJO en 2
                 spikes_added = 0
                 
                 for i in range(num_spikes_in_danger):
@@ -1412,6 +1403,7 @@ class IceWorldGenerator(WorldGenerator):
                         'height': spike_height
                     })
                     spikes_added += 1
+
         
         # 6. ESPINAS EN PLATAFORMAS - Máximas
         eligible_platforms = []
@@ -1488,10 +1480,10 @@ class IceWorldGenerator(WorldGenerator):
     def add_goal(self, width, height):
         """Meta del hielo al final"""
         goal = {
-            'x': width - 100,
-            'y': height - 130,
+            'x': width - 120,
+            'y': height - 300,
             'width': 60,
-            'height': 80
+            'height': 250
         }
         return goal
 
@@ -1504,10 +1496,3 @@ class IceWorldGenerator(WorldGenerator):
         # FEATURE PRINCIPAL: Física resbaladiza
         world_data['slippery'] = True  # Todas las superficies son resbaladizas
         world_data['friction'] = 0.3   # Coeficiente bajo de fricción (vs 1.0 normal)
-        
-        # Features adicionales del hielo (para futuro):
-        # - Nieve cayendo que reduce visibilidad
-        # - Viento helado que empuja al jugador
-        # - Plataformas que se rompen después de pisarlas
-        world_data['snowfall'] = True  # Flag para efecto de nieve
-        world_data['breaking_platforms'] = True  # Flag para plataformas que se rompen

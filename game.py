@@ -283,7 +283,7 @@ class Goal:
         self.x = x
         self.y = y
         self.width = 60
-        self.height = 80
+        self.height = 250
         self.reached = False
         
         # Colores para el diseño
@@ -399,6 +399,7 @@ class Game:
         self.width = width
         self.height = height
         self.screen = pygame.display.set_mode((width, height))
+        self.goal = None
         pygame.display.set_caption("Super Kirby Bro - Proyecto Final")
         self.clock = pygame.time.Clock()
         self.running = True
@@ -446,14 +447,14 @@ class Game:
         self.platforms = []
         for p in world_data['platforms']:
             platform = Platform(p['x'], p['y'], p['width'], p['height'], 
-                              self.colors['platform'])
+                            self.colors['platform'])
             self.platforms.append(platform)
         
         # Crear espinas
         self.spikes = []
         for s in world_data['spikes']:
             spike = Spike(s['x'], s['y'], s['width'], s['height'],
-                         self.colors['hazard'])
+                        self.colors['hazard'])
             self.spikes.append(spike)
         
         # Crear checkpoints
@@ -462,9 +463,17 @@ class Game:
             checkpoint = Checkpoint(c['x'], c['y'], i)
             self.checkpoints.append(checkpoint)
         
+        # Crear goal (sin tipo)
+        if world_data['goal']:
+            goal_data = world_data['goal']
+            self.goal = Goal(goal_data['x'], goal_data['y'])
+        else:
+            self.goal = None
+        
         # Resetear jugador
         self.player = Player(100, 100)
         self.checkpoint_manager.clear_checkpoints()
+
     
     def check_collisions(self):
         """Verifica colisiones con espinas y checkpoints"""
@@ -478,6 +487,11 @@ class Game:
                     memento = self.player.create_memento()
                     self.checkpoint_manager.save_checkpoint(
                         checkpoint.checkpoint_id, memento)
+        
+        if self.goal and not self.goal.reached:
+            if player_rect.colliderect(self.goal.get_rect()):
+                self.goal.activate()
+                print(f"\n🎉 ¡META ALCANZADA! Completaste {self.world_name}")
         
         # Colisión con espinas
         for spike in self.spikes:
@@ -504,21 +518,26 @@ class Game:
         
         # Dibujar plataformas CON cámara
         for platform in self.platforms:
-            platform.draw(self.screen, self.camera_x)  # ← Pasar camera_x
+            platform.draw(self.screen, self.camera_x)
         
         # Dibujar espinas CON cámara
         for spike in self.spikes:
-            spike.draw(self.screen, self.camera_x)  # ← Pasar camera_x
+            spike.draw(self.screen, self.camera_x)
         
         # Dibujar checkpoints CON cámara
         for checkpoint in self.checkpoints:
-            checkpoint.draw(self.screen, self.camera_x)  # ← Pasar camera_x
+            checkpoint.draw(self.screen, self.camera_x)
+        
+        # Dibujar goal CON cámara
+        if self.goal:
+            self.goal.draw(self.screen, self.camera_x)
         
         # Dibujar jugador CON cámara
-        self.player.draw(self.screen, self.camera_x)  # ← Pasar camera_x
+        self.player.draw(self.screen, self.camera_x)
         
         # Dibujar UI
         self.draw_ui()
+
     
     def draw_ui(self):
         """Dibuja la interfaz de usuario"""
