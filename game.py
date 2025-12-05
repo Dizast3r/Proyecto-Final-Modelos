@@ -8,7 +8,7 @@ from commands import InputHandler
 from abc import ABC, abstractmethod
 
 DEFAULT_SPEED = 5
-DEFAULT_JUMP_POWER = 15
+DEFAULT_JUMP_POWER = 18
 DEFAULT_GRAVITY = 0.8
 DEFAULT_LIVES = 3
 MAX_SPEED = 30
@@ -188,8 +188,16 @@ class Player:
             self.jump_power = state['jump_power']
     
     def get_rect(self):
-        """Retorna el rectángulo de colisión"""
-        return pygame.Rect(self.x, self.y, self.width, self.height)
+        """Retorna el rectángulo de colisión (ligeramente más pequeño que el sprite)"""
+        padding_x = 6   # margen lateral
+        padding_top = 4 # margen superior ligero
+        return pygame.Rect(
+            self.x + padding_x,
+            self.y + padding_top,
+            self.width - 2 * padding_x,
+            self.height - padding_top
+        )
+
     
     def die(self):
         """El jugador muere"""
@@ -414,8 +422,15 @@ class Enemy:
                                      (int(screen_x + 28), eye_y), 3)
     
     def get_rect(self):
-        """Retorna el rectángulo de colisión"""
-        return pygame.Rect(self.x, self.y, self.width, self.height)
+        """Rectángulo de colisión del enemigo (más estrecho que el sprite)"""
+        padding_x = 6  # margen lateral
+        return pygame.Rect(
+            self.x + padding_x,
+            self.y,
+            self.width - 2 * padding_x,
+            self.height
+        )
+
     
     def die(self):
         """Mata al enemigo"""
@@ -477,8 +492,11 @@ class Spike:
         pygame.draw.polygon(screen, (0, 0, 0), points, 2)
     
     def get_rect(self):
-        """Retorna el rectángulo de colisión"""
-        return pygame.Rect(self.x, self.y, self.width, self.height)
+        """Retorna el rectángulo de colisión (solo parte superior del triángulo)"""
+        hit_height = int(self.height * 0.6)  # solo el 60% superior es letal
+        hit_y = self.y                      # desde la punta hacia abajo
+        return pygame.Rect(self.x, hit_y, self.width, hit_height)
+
 
 
 class Checkpoint:
@@ -775,7 +793,9 @@ class Game:
         for e in world_data.get('enemies', []):
             enemy = Enemy(e['x'], e['y'])
             self.enemies.append(enemy)
-        
+
+
+        self.powerups = []
         for p in world_data.get('powerups', []):
             p_type = p.get('type', 'speed')  # 'speed', 'jump', 'life'
             x = p['x']
@@ -821,16 +841,21 @@ class Game:
                 print(f"\n🎉 ¡META ALCANZADA! Completaste {self.world_name}")
 
         for powerup in self.powerups:
-            # Si ya fue recogido, lo ignoramos
             if getattr(powerup, 'collected', False):
                 continue
 
-            powerup_rect = pygame.Rect(powerup.x, powerup.y,
-                                    powerup.width, powerup.height)
+            padding = 4  # margen pequeño
+            px = powerup.x + padding
+            py = powerup.y + padding
+            pw = powerup.width - 2 * padding
+            ph = powerup.height - 2 * padding
+
+            powerup_rect = pygame.Rect(px, py, pw, ph)
+
             if player_rect.colliderect(powerup_rect):
-                # Aplicar efecto y marcar como recogido
                 powerup.power(self.player)
                 powerup.collected = True
+
 
         for enemy in self.enemies:
             if not enemy.alive:
