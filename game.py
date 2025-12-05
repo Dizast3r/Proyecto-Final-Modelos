@@ -20,6 +20,14 @@ SPRITE_EXTENSION = '.png'
 SPRITE_COUNT = 9
 ANIMATION_PLAYER_SPEED = 0.30
 
+
+SPRITE_ENEMY_PATH = 'Assets/EnemySprites/'
+ENEMY_SPRITE_COUNT = 3
+ENEMY_SPRITE_PREFIX = 'Sprite'
+ENEMY_SPRITE_EXTENSION = '.png'
+ENEMY_SPRITE_DEATH = 'SpriteDeath.png'
+ANIMATION_ENEMY_SPEED = 10
+
 class Player:
     """Clase del jugador que puede guardar y restaurar su estado"""
     
@@ -186,6 +194,253 @@ class Player:
         if new_jump_power <= MAX_JUMP_POWER:
             self.jump_power = new_jump_power
         
+class Enemy:
+    """Clase para enemigos con movimiento autónomo y comportamiento con sprites"""
+    
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.width = 40
+        self.height = 50  # Más pequeño que jugador (60)
+        
+        # Física
+        self.velocity_x = -2  # Velocidad lenta, negativa = izquierda
+        self.velocity_y = 0
+        self.gravity = 0.8
+        self.on_ground = False
+        
+        # Estado
+        self.alive = True
+        self.death_timer = 0
+        self.death_duration = 120  # 2 segundos a 60 FPS
+        
+        # Cargar sprites
+        self.sprites = []
+        for i in range(1, ENEMY_SPRITE_COUNT + 1):
+            try:
+                sprite_file = f'{SPRITE_ENEMY_PATH}{ENEMY_SPRITE_PREFIX}{i}{ENEMY_SPRITE_EXTENSION}'
+                img = pygame.image.load(sprite_file)
+                img = pygame.transform.scale(img, (self.width, self.height))
+                self.sprites.append(img)
+            except pygame.error as e:
+                print(f"Error cargando {sprite_file}: {e}")
+        
+        # Sprite de muerte
+        self.death_sprite = None
+        try:
+            death_file = f'{SPRITE_ENEMY_PATH}{ENEMY_SPRITE_DEATH}'
+            self.death_sprite = pygame.image.load(death_file)
+            self.death_sprite = pygame.transform.scale(self.death_sprite, (self.width, self.height))
+        except pygame.error as e:
+            print(f"Error cargando sprite de muerte: {e}")
+        
+        # Sprite idle - primer sprite
+        self.idle_sprite = self.sprites[0] if self.sprites else None
+        
+        # Control de animación ping-pong: 1,2,3,2,1,2,3...
+        self.current_sprite = 0
+        self.animation_speed = ANIMATION_ENEMY_SPEED
+        self.animation_counter = 0
+        self.sprite_sequence = [0, 1, 2, 1]  # Índices para ping-pong
+        self.sequence_index = 0
+        
+        # Dirección (para flip horizontal)
+        self.facing_right = False  # Empieza mirando izquierda
+        
+        # Imagen actual
+        self.image = self.idle_sprite
+    
+    def update_animation(self):
+        """Actualiza la animación del enemigo (ping-pong: 1,2,3,2,1)"""
+        if not self.alive:
+            # Si está muerto, usar sprite de muerte
+            self.image = self.death_sprite if self.death_sprite else self.idle_sprite
+            return
+        
+        if not self.sprites:
+            return
+        
+        # Contador de frames
+        self.animation_counter += 1
+        
+        if self.animation_counter >= self.animation_speed:
+            self.animation_counter = 0
+            
+            # Avanzar en la secuencia ping-pong
+            self.sequence_index = (self.sequence_index + 1) % len(self.sprite_sequence)
+            self.current_sprite = self.sprite_sequence[self.sequence_index]
+            
+            # Obtener sprite base
+            base_sprite = self.sprites[self.current_sprite]
+            
+            # Aplicar flip según dirección
+            if self.facing_right:
+                self.image = base_sprite
+            else:
+                self.image = pygame.transform.flip(base_sprite, True, False)
+    
+    def change_direction(self):
+        """Cambia la dirección del enemigo"""
+        self.velocity_x *= -1
+        self.facing_right = not self.facing_right
+    
+    def check_obstacles(self, spikes, checkpoints, goal):
+        """Verifica si debe cambiar de dirección por obstáculos"""
+        if not self.alive:
+            return
+        
+        # Crear rectángulo de detección adelante
+        detection_distance = 50
+        if not self.facing_right:  # Mirando izquierda
+            detection_rect = pygame.Rect(
+                self.x - detection_distance,
+                self.y,
+                detection_distance,
+                self.height
+            )
+        else:  # Mirando derecha
+            detection_rect = pygame.Rect(
+                self.x + self.width,
+                self.y,
+                detection_distance,
+                self.height
+            )
+        
+        # Detectar espinas
+        for spike in spikes:
+            if detection_rect.colliderect(spike.get_rect()):
+                self.change_direction()
+                return
+        
+        # Detectar checkpoints
+        for checkpoint in checkpoints:
+            if detection_rect.colliderect(checkpoint.get_rect()):
+                self.change_direction()
+                return
+        
+        # Detectar meta
+        if goal:
+            if detection_rect.colliderect(goal.get_rect()):
+                self.change_direction()
+                return
+    
+    def update(self, platforms, spikes, checkpoints, goal):
+        """Actualiza la posición y estado del enemigo"""
+        if not self.alive:
+            # Si está muerto, contar timer
+            self.death_timer += 1
+            self.update_animation()
+            return
+        
+        # Actualizar animación
+        self.update_animation()
+        
+        # Aplicar gravedad
+        self.velocity_y += self.gravity
+        
+        # Limitar velocidad de caída
+        if self.velocity_y > 20:
+            self.velocity_y = 20
+        
+        # Movimiento horizontal
+        self.x += self.velocity_x
+        
+        # Movimiento vertical
+        self.y += self.velocity_y
+        
+        # Colisiones con plataformas
+        self.on_ground = False
+        enemy_rect = pygame.Rect(self.x, self.y, self.width, self.height)
+        
+        for platform in platforms:
+            platform_rect = pygame.Rect(
+                platform['x'], platform['y'],
+                platform['width'], platform['height']
+            )
+            
+            if enemy_rect.colliderect(platform_rect):
+                # Colisión desde arriba (aterrizar)
+                if self.velocity_y > 0:
+                    self.y = platform['y'] - self.height
+                    self.velocity_y = 0
+                    self.on_ground = True
+                # Colisión desde abajo
+                elif self.velocity_y < 0:
+                    self.y = platform['y'] + platform['height']
+                    self.velocity_y = 0
+        
+        # Verificar obstáculos adelante
+        self.check_obstacles(spikes, checkpoints, goal)
+        
+        # Cambiar dirección en bordes de plataformas
+        if self.on_ground:
+            # Detectar si está por caerse del borde
+            if not self.facing_right:  # Mirando izquierda
+                feet_x = self.x - 5
+            else:  # Mirando derecha
+                feet_x = self.x + self.width + 5
+            
+            feet_rect = pygame.Rect(
+                feet_x,
+                self.y + self.height + 5,
+                10,
+                10
+            )
+            
+            on_platform = False
+            for platform in platforms:
+                platform_rect = pygame.Rect(
+                    platform['x'], platform['y'],
+                    platform['width'], platform['height']
+                )
+                if feet_rect.colliderect(platform_rect):
+                    on_platform = True
+                    break
+            
+            if not on_platform:
+                self.change_direction()
+    
+    def draw(self, screen, camera_x):
+        """Dibuja el enemigo"""
+        screen_x = self.x - camera_x
+        
+        if self.image:
+            screen.blit(self.image, (screen_x, self.y))
+        else:
+            # Fallback: dibujar rectángulo
+            if self.alive:
+                color = (255, 100, 0)  # Naranja
+            else:
+                color = (100, 100, 100)  # Gris
+            pygame.draw.rect(screen, color, 
+                           (screen_x, self.y, self.width, self.height))
+            
+            # Ojos simples
+            if self.alive:
+                eye_y = int(self.y + 15)
+                if not self.facing_right:  # Izquierda
+                    pygame.draw.circle(screen, (0, 0, 0),
+                                     (int(screen_x + 12), eye_y), 3)
+                else:  # Derecha
+                    pygame.draw.circle(screen, (0, 0, 0),
+                                     (int(screen_x + 28), eye_y), 3)
+    
+    def get_rect(self):
+        """Retorna el rectángulo de colisión"""
+        return pygame.Rect(self.x, self.y, self.width, self.height)
+    
+    def die(self):
+        """Mata al enemigo"""
+        if self.alive:
+            self.alive = False
+            self.death_timer = 0
+            self.velocity_x = 0
+            self.velocity_y = 0
+    
+    def should_be_removed(self):
+        """Verifica si el enemigo debe ser eliminado (después de 2 segundos muerto)"""
+        return not self.alive and self.death_timer >= self.death_duration
+
 
 
 class Platform:

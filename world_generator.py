@@ -16,6 +16,9 @@ CHECKPOINT_SAFE_RADIUS = 250  # Radio de exclusión alrededor de checkpoints
 MIN_VERTICAL_SPACING = 80  # Espacio mínimo vertical entre plataformas cercanas
 MIN_HORIZONTAL_SPACING = 100  # Espacio mínimo horizontal si están en alturas similares
 
+ENEMY_SPAWN_CHANCE = 0.35  # 35% probabilidad por plataforma
+ENEMY_SPAWN_CHANCE_GROUND = 0.20  # 20% probabilidad en el suelo
+
 
 class WorldGenerator(ABC):
     """Clase abstracta que define el template method para generar mundos"""
@@ -44,13 +47,163 @@ class WorldGenerator(ABC):
         world_data['platforms'] = self.generate_platforms(width, height, world_data['checkpoints'])  # Pasa checkpoints
         world_data['spikes'] = self.generate_hazards(width, height, world_data['platforms'], world_data['checkpoints'])  # Pasa ambos
         world_data['powerups'] = self.add_powerups(width, height)
-        world_data['enemies'] = self.add_enemies(width, height)
+        world_data['enemies'] = self.add_enemies(
+            width, 
+            height, 
+            world_data['platforms'],
+            world_data['checkpoints'],
+            world_data['goal']
+        )
         world_data['goal'] = self.add_goal(width, height)
         
         self.add_special_features(world_data, width, height)
         
         return world_data
     
+    @abstractmethod
+    def define_colors(self):
+        """Define los colores del mundo"""
+        pass
+    
+    @abstractmethod
+    def get_world_name(self):
+        """Retorna el nombre del mundo"""
+        pass
+    
+    @abstractmethod
+    def generate_platforms(self, width, height, checkpoints):
+        """Genera las plataformas evitando checkpoints"""
+        pass
+    
+    @abstractmethod
+    def generate_hazards(self, width, height, platforms, checkpoints):
+        """Genera espinas evitando checkpoints y validando superficies"""
+        pass
+    
+    def generate_checkpoints(self, width, height):
+        """Genera checkpoints (implementación por defecto)"""
+        checkpoints = []
+        for i in range(1, NUMBER_OF_CHECKPOINTS_PER_LEVEL + 1):
+            checkpoints.append({
+                'x': i * SPACE_BETWEEN_CHECKPOINTS, 
+                'y': height - 150
+            })
+        return checkpoints
+    
+    def add_powerups(self, width, height):
+        """Genera power-ups (implementación por defecto - vacía por ahora)"""
+        return []
+    
+    def add_enemies(self, width, height, platforms, checkpoints, goal):
+        """Genera enemigos sobre plataformas (implementación común para todos)"""
+        enemies = []
+        
+        # 1. ZONA SEGURA - No spawnear enemigos cerca del inicio
+        safe_zone_x = 500
+        
+        # 2. REVISAR TODAS LAS PLATAFORMAS
+        for platform in platforms:
+            platform_x = platform['x']
+            platform_y = platform['y']
+            platform_width = platform['width']
+            platform_height = platform['height']
+            
+            # === VALIDACIÓN 1: No en zona segura ===
+            if platform_x < safe_zone_x:
+                continue
+            
+            # === VALIDACIÓN 2: Plataforma suficientemente grande ===
+            if platform_width < 80:
+                continue
+            
+            # === VALIDACIÓN 3: Probabilidad según tipo de superficie ===
+            is_ground = (platform_y >= height - 60)
+            
+            if is_ground:
+                current_probability = ENEMY_SPAWN_CHANCE_GROUND  # ← USO DE CONSTANTE
+            else:
+                current_probability = ENEMY_SPAWN_CHANCE  # ← USO DE CONSTANTE
+            
+            # === VALIDACIÓN 4: Probabilidad de spawn ===
+            if random.random() > current_probability:
+                continue
+            
+            # === VALIDACIÓN 5: No cerca de checkpoints ===
+            too_close_to_checkpoint = False
+            checkpoint_safe_radius = 200
+            
+            for checkpoint in checkpoints:
+                distance_x = abs(platform_x - checkpoint['x'])
+                distance_y = abs(platform_y - checkpoint['y'])
+                
+                if distance_x < checkpoint_safe_radius and distance_y < 150:
+                    too_close_to_checkpoint = True
+                    break
+            
+            if too_close_to_checkpoint:
+                continue
+            
+            # === VALIDACIÓN 6: No cerca de la meta ===
+            if goal:
+                goal_safe_radius = 300
+                distance_to_goal_x = abs(platform_x - goal['x'])
+                distance_to_goal_y = abs(platform_y - goal['y'])
+                
+                if distance_to_goal_x < goal_safe_radius and distance_to_goal_y < 150:
+                    continue
+            
+            # === VALIDACIÓN 7: No muy cerca del borde de la plataforma ===
+            margin = 40
+            available_width = platform_width - (2 * margin)
+            
+            if available_width < 40:
+                continue
+            
+            # Calcular posición del enemigo
+            enemy_x = platform_x + margin + random.randint(0, int(available_width))
+            enemy_y = platform_y - 50
+            
+            # === VALIDACIÓN 8: No superpuesto con otros enemigos ===
+            too_close_to_other_enemy = False
+            min_distance_between_enemies = 100
+            
+            for existing_enemy in enemies:
+                distance = abs(enemy_x - existing_enemy['x'])
+                if distance < min_distance_between_enemies:
+                    too_close_to_other_enemy = True
+                    break
+            
+            if too_close_to_other_enemy:
+                continue
+            
+            # === TODAS LAS VALIDACIONES PASADAS ===
+            enemy = {
+                'x': enemy_x,
+                'y': enemy_y,
+                'width': 40,
+                'height': 50
+            }
+            enemies.append(enemy)
+        
+        return enemies
+
+    
+    def add_goal(self, width, height):
+        """Genera la meta al final del mundo"""
+        goal = {
+            'x': width - 120,
+            'y': height - 300,
+            'width': 60,
+            'height': 250
+        }
+        return goal
+    
+    @abstractmethod
+    def add_special_features(self, world_data, width, height):
+        """Hook method - características únicas del mundo (música, física, etc)"""
+        pass
+
+    #Funciones Auxiliares
     def rectangles_overlap(self, x1, y1, w1, h1, x2, y2, w2, h2):
         """Verifica si dos rectángulos se superponen"""
         return not (x1 + w1 < x2 or x2 + w2 < x1 or y1 + h1 < y2 or y2 + h2 < y1)
@@ -99,53 +252,6 @@ class WorldGenerator(ABC):
                     return True
         
         return False
-    
-    @abstractmethod
-    def define_colors(self):
-        """Define los colores del mundo"""
-        pass
-    
-    @abstractmethod
-    def get_world_name(self):
-        """Retorna el nombre del mundo"""
-        pass
-    
-    @abstractmethod
-    def generate_platforms(self, width, height, checkpoints):
-        """Genera las plataformas evitando checkpoints"""
-        pass
-    
-    @abstractmethod
-    def generate_hazards(self, width, height, platforms, checkpoints):
-        """Genera espinas evitando checkpoints y validando superficies"""
-        pass
-    
-    def generate_checkpoints(self, width, height):
-        """Genera checkpoints (implementación por defecto)"""
-        checkpoints = []
-        for i in range(1, NUMBER_OF_CHECKPOINTS_PER_LEVEL + 1):
-            checkpoints.append({
-                'x': i * SPACE_BETWEEN_CHECKPOINTS, 
-                'y': height - 150
-            })
-        return checkpoints
-    
-    def add_powerups(self, width, height):
-        """Genera power-ups (implementación por defecto - vacía por ahora)"""
-        return []
-    
-    def add_enemies(self, width, height):
-        """Genera enemigos (implementación por defecto - vacía por ahora)"""
-        return []
-    
-    @abstractmethod
-    def add_goal(self, width, height):
-        """Genera la meta del nivel (cada mundo debe implementarlo)"""
-        pass
-    
-    def add_special_features(self, world_data, width, height):
-        """Hook method - características únicas del mundo (música, física, etc)"""
-        pass
 
 
 
@@ -553,18 +659,6 @@ class GrassWorldGenerator(WorldGenerator):
                     })
         
         return spikes
-
-    
-    def add_goal(self, width, height):
-        """Genera la meta al final del mundo"""
-        goal = {
-            'x': width - 120,
-            'y': height - 300,
-            'width': 60,
-            'height': 250
-        }
-        return goal
-
     
     def add_special_features(self, world_data, width, height):
         """Añade música y características especiales del mundo de pasto"""
@@ -1053,20 +1147,7 @@ class DesertWorldGenerator(WorldGenerator):
                     spike_placed = True
         
         return spikes
-
-
-    
-    def add_goal(self, width, height):
-        """Meta del desierto al final"""
-        goal = {
-            'x': width - 120,
-            'y': height - 300,
-            'width': 60,
-            'height': 250
-        }
-        return goal
-
-    
+   
     def add_special_features(self, world_data, width, height):
         """Añade música y características del desierto"""
         # Música de desierto (ritmo medio, atmosférica)
@@ -1475,19 +1556,7 @@ class IceWorldGenerator(WorldGenerator):
         
         return spikes
 
-
-    
-    def add_goal(self, width, height):
-        """Meta del hielo al final"""
-        goal = {
-            'x': width - 120,
-            'y': height - 300,
-            'width': 60,
-            'height': 250
-        }
-        return goal
-
-    
+  
     def add_special_features(self, world_data, width, height):
         """Añade física resbaladiza y música del hielo"""
         # Música épica/intensa para nivel difícil
