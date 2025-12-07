@@ -109,7 +109,6 @@ class WorldConfig:
     hazard_config: HazardConfig
     powerup_config: PowerUpConfig
     music_file: str
-    special_features: Optional[Dict[str, any]] = None
 
 
 # ============================================================================
@@ -1061,8 +1060,4 @@ class IceWorldGenerator(WorldGenerator):
                 life_probability=0.50
             ),
             music_file='ice_theme.mp3',
-            special_features={
-                'slippery': True,
-                'friction': 0.3
-            }
         )
