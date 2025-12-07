@@ -42,6 +42,16 @@ class Player:
         self.current_sprite = 0
         self.animation_speed = PlayerConfig.ANIMATION_SPEED
         self.animation_counter = 0
+
+        #Player Rect
+        self.padding_x = 6
+        self.padding_top = 4
+        self.rect = pygame.Rect(
+            self.x + self.padding_x,
+            self.y + self.padding_top,
+            self.width - 2 * self.padding_x,
+            self.height - self.padding_top
+        )
         
         # Dirección (para flip horizontal)
         self.facing_right = True
@@ -86,6 +96,8 @@ class Player:
         
         # Movimiento vertical
         self.y += self.velocity_y
+
+        self._update_rect()
         
         # Colisiones con plataformas
         self.on_ground = False
@@ -126,6 +138,10 @@ class Player:
         elif self.x + self.width > world_width:
             self.x = world_width - self.width
             self.velocity_x = 0
+    
+    def _update_rect(self):
+        self.rect.x = self.x + self.padding_x
+        self.rect.y = self.y + self.padding_top
     
     def draw(self, screen, camera_x):
         """Dibuja el jugador"""
@@ -169,15 +185,7 @@ class Player:
         self.restore_from_memento(self._initial_spawn_memento)
     
     def get_rect(self):
-        """Retorna el rectángulo de colisión (con padding)"""
-        padding_x = 6
-        padding_top = 4
-        return pygame.Rect(
-            self.x + padding_x,
-            self.y + padding_top,
-            self.width - 2 * padding_x,
-            self.height - padding_top
-        )
+        return self.rect
     
     def die(self):
         """El jugador muere"""

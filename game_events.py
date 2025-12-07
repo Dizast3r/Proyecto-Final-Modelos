@@ -1,11 +1,12 @@
 """
 OBSERVER PATTERN - Sistema de eventos del juego
-Permite que diferentes componentes reaccionen a eventos sin acoplamiento directo
+✅ MODIFICADO: GameOverChecker ahora cambia estado en vez de cerrar
 """
 
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any
 from enum import Enum
+from menu_system import GameState
 
 
 class GameEventType(Enum):
@@ -90,7 +91,7 @@ class ConsoleLogger(GameEventObserver):
                 lambda e: f"💀 Jugador murió. Vidas restantes: {e.data.get('lives_remaining', 0)}",
             
             GameEventType.PLAYER_RESPAWNED: 
-                lambda e: f"🔄 Jugador reaparece en checkpoint",
+                lambda e: f"🔄 Jugador reaparece",
             
             GameEventType.ENEMY_KILLED: 
                 lambda e: f"💥 ¡Enemigo aplastado!",
@@ -116,20 +117,49 @@ class ConsoleLogger(GameEventObserver):
 
 
 class GameOverChecker(GameEventObserver):
-    """Observador que verifica condición de Game Over"""
+    """
+    Observador que verifica condición de Game Over
+    
+    ✅ MODIFICADO: Ahora cambia el estado del menú en vez de cerrar el juego
+    """
     
     def __init__(self, game):
         self.game = game
     
     def on_game_event(self, event: GameEvent):
-        """Verifica si el juego debe terminar"""
+        """Verifica si el juego debe mostrar Game Over"""
         if event.event_type == GameEventType.PLAYER_DIED:
             lives = event.data.get('lives_remaining', 0)
             if lives <= 0:
                 print("\n" + "="*50)
                 print("GAME OVER!")
                 print("="*50)
-                self.game.running = False
+                #Cambiar estado a GAME_OVER en vez de cerrar
+                self.game.menu_manager.current_state = GameState.GAME_OVER
+
+
+class LevelCompleteChecker(GameEventObserver):
+    """
+    ✨ NUEVO: Observador que detecta cuando se completa un nivel
+    """
+    
+    def __init__(self, game):
+        self.game = game
+    
+    def on_game_event(self, event: GameEvent):
+        """Detecta cuando se alcanza la meta"""
+        if event.event_type == GameEventType.GOAL_REACHED:
+            
+            
+            # Determinar si es el último mundo
+            if self.game.current_world_index >= len(self.game.world_sequence) - 1:
+                #Último mundo completado
+                self.game.menu_manager.current_state = GameState.GAME_COMPLETE
+                print("🏆 ¡JUEGO COMPLETADO!")
+            else:
+                #Nivel completado, hay más mundos
+                self.game.menu_manager.current_state = GameState.LEVEL_COMPLETE
+                print("✅ Nivel completado, siguiente mundo disponible")
 
 
 class CheckpointSaver(GameEventObserver):
