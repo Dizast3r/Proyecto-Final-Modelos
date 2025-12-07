@@ -95,9 +95,7 @@ class HazardConfig:
 @dataclass
 class PowerUpConfig:
     """Configuración para distribución de PowerUps"""
-    speed_probability: float
-    jump_probability: float
-    life_probability: float  # Debe sumar 1.0 con las anteriores
+    probabilities: Dict[str, float]
 
 
 @dataclass
@@ -229,6 +227,74 @@ class CollisionValidator:
         
         return True
 
+# ============================================================================
+# FACTORY + REGISTRY PATTERN - Para selección de PowerUps
+# ============================================================================
+
+class PowerUpTypeRegistry:
+    """
+    Registry simple de tipos de PowerUp disponibles.
+    NO es Singleton - cada generador puede tener su propio registry si lo necesita.
+    """
+    
+    def __init__(self):
+        self._available_types = set()
+    
+    def register(self, powerup_type: str):
+        """Registra un tipo de PowerUp como disponible"""
+        self._available_types.add(powerup_type)
+    
+    def is_registered(self, powerup_type: str) -> bool:
+        """Verifica si un tipo está registrado"""
+        return powerup_type in self._available_types
+    
+    def get_all_types(self) -> List[str]:
+        """Retorna todos los tipos registrados"""
+        return list(self._available_types)
+
+
+class PowerUpSelector:
+    """
+    Factory para seleccionar tipos de PowerUp basándose en probabilidades.
+    Usa el Registry para validar que los tipos existan.
+    """
+    
+    def __init__(self, registry: PowerUpTypeRegistry):
+        self._registry = registry
+    
+    def select_from_probabilities(self, probabilities: Dict[str, float]) -> str:
+        """
+        Selecciona un tipo de PowerUp basándose en un diccionario de probabilidades.
+        
+        Args:
+            probabilities: Dict con formato {'speed': 0.4, 'jump': 0.3, 'life': 0.3}
+        
+        Returns:
+            El tipo seleccionado (ej: 'speed')
+        
+        Raises:
+            ValueError: Si algún tipo no está registrado o las probabilidades no suman ~1.0
+        """
+        # Validación 1: Verificar que todos los tipos estén registrados
+        for ptype in probabilities.keys():
+            if not self._registry.is_registered(ptype):
+                raise ValueError(
+                    f"Tipo de PowerUp '{ptype}' no registrado. "
+                    f"Tipos disponibles: {self._registry.get_all_types()}"
+                )
+        
+        # Validación 2: Verificar que sumen aproximadamente 1.0
+        total = sum(probabilities.values())
+        if not (0.99 <= total <= 1.01):
+            raise ValueError(
+                f"Las probabilidades deben sumar 1.0, pero suman {total:.3f}"
+            )
+        
+        # Selección usando random.choices
+        types = list(probabilities.keys())
+        weights = list(probabilities.values())
+        
+        return random.choices(types, weights=weights, k=1)[0]
 
 # ============================================================================
 # GENERADORES BASE - TEMPLATE METHOD PATTERN
@@ -243,6 +309,15 @@ class WorldGenerator(ABC):
         self.physics = PhysicsValidator()
         self.checkpoint_validator = None  # Se inicializa en generate_world
         self.collision_validator = None
+        self._powerup_registry = PowerUpTypeRegistry()
+        self._initialize_powerup_registry()
+        self._powerup_selector = PowerUpSelector(self._powerup_registry)
+
+    def _initialize_powerup_registry(self):
+        """Registra los tipos de PowerUp disponibles en el juego"""
+        self._powerup_registry.register('speed')
+        self._powerup_registry.register('jump')
+        self._powerup_registry.register('life')
     
     def generate_world(self, width: int, height: int) -> Dict:
         """
@@ -833,7 +908,9 @@ class WorldGenerator(ABC):
             if self._validate_powerup_placement(
                 x, y, checkpoints, goal, enemies, spikes, powerups
             ):
-                powerup_type = self._select_powerup_type(config)
+                powerup_type = self._powerup_selector.select_from_probabilities(
+                    config.probabilities
+                )
                 powerups.append({
                     'x': x,
                     'y': y,
@@ -897,16 +974,6 @@ class WorldGenerator(ABC):
         
         return True
     
-    def _select_powerup_type(self, config: PowerUpConfig) -> str:
-        """Selecciona tipo de PowerUp basado en probabilidades"""
-        rand = random.random()
-        
-        if rand < config.speed_probability:
-            return 'speed'
-        elif rand < config.speed_probability + config.jump_probability:
-            return 'jump'
-        else:
-            return 'life'
 
 
 # ============================================================================
@@ -954,9 +1021,11 @@ class GrassWorldGenerator(WorldGenerator):
                 spike_height=30
             ),
             powerup_config=PowerUpConfig(
-                speed_probability=0.40,
-                jump_probability=0.30,
-                life_probability=0.30
+                probabilities={
+                    'speed': 0.25,
+                    'jump': 0.50,
+                    'life': 0.25
+                }
             ),
             music_file='grass_theme.mp3'
         )
@@ -1003,9 +1072,11 @@ class DesertWorldGenerator(WorldGenerator):
                 spike_height=32
             ),
             powerup_config=PowerUpConfig(
-                speed_probability=0.25,
-                jump_probability=0.50,
-                life_probability=0.25
+                probabilities={
+                    'speed': 0.25,
+                    'jump': 0.25,
+                    'life': 0.50
+                }
             ),
             music_file='desert_theme.mp3'
         )
@@ -1052,9 +1123,11 @@ class IceWorldGenerator(WorldGenerator):
                 spike_height=35
             ),
             powerup_config=PowerUpConfig(
-                speed_probability=0.25,
-                jump_probability=0.25,
-                life_probability=0.50
+                probabilities={
+                    'speed': 0.25,
+                    'jump': 0.25,
+                    'life': 0.50
+                }
             ),
-            music_file='ice_theme.mp3',
+            music_file='ice_theme.mp3'
         )
