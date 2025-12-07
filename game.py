@@ -442,7 +442,6 @@ class PowerUP(ABC):
                 (screen_x, self.y, self.width, self.height)
             )
 
-
 class Game:
     """Clase principal del juego - MODIFICADA para Flyweight"""
     
