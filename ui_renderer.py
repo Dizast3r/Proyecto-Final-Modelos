@@ -17,7 +17,7 @@ class UIRenderer:
         """Dibuja todos los elementos de UI"""
         self._draw_world_name(world_name)
         self._draw_lives(player_lives)
-        self._draw_instructions()
+
     
     def _draw_world_name(self, world_name):
         """Dibuja el nombre del mundo"""
@@ -28,17 +28,3 @@ class UIRenderer:
         """Dibuja las vidas del jugador"""
         lives_text = self.small_font.render(f"Vidas: {lives}", True, (255, 0, 0))
         self.screen.blit(lives_text, (10, 50))
-    
-    def _draw_instructions(self):
-        """Dibuja las instrucciones del juego"""
-        instructions = [
-            "Flechas/WASD: Mover",
-            "Espacio/Arriba: Saltar",
-            "ESC: Salir",
-            "1/2/3: Cambiar mundo"
-        ]
-        y_offset = 80
-        for instruction in instructions:
-            text = self.small_font.render(instruction, True, (0, 0, 0))
-            self.screen.blit(text, (10, y_offset))
-            y_offset += 25

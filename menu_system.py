@@ -200,8 +200,8 @@ class MenuManager:
         
         # Instrucciones
         instructions = [
-            "Controles: ← → / A D - Mover",
-            "Espacio / ↑ / W - Saltar",
+            "Controles: Flecha Izquierda-Derecha/ A-D - Mover",
+            "Espacio / Flecha Arriba / W - Saltar",
             "ESC - Pausar"
         ]
         y_offset = 520
@@ -299,7 +299,7 @@ class MenuManager:
         messages = [
             "¡Completaste todos los mundos!",
             "Eres un verdadero héroe",
-            "🏆 JUEGO COMPLETADO 🏆"
+            " JUEGO COMPLETADO "
         ]
         y_offset = panel_y + 140
         for msg in messages:
