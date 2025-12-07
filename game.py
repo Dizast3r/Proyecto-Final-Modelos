@@ -212,11 +212,14 @@ class Player:
         new_speed = self.speed + speed_increase
         if new_speed <= MAX_SPEED:
             self.speed = new_speed
+        else:
+            self.speed = MAX_SPEED
     
     def increase_jump_power(self, jump_power_increase):
         new_jump_power = self.jump_power + jump_power_increase
         if new_jump_power <= MAX_JUMP_POWER:
             self.jump_power = new_jump_power
+        else: self.speed = MAX_SPEED
         
 class Enemy:
     """Clase para enemigos con movimiento autónomo y comportamiento con sprites"""
