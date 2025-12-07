@@ -23,6 +23,7 @@ class WorldLoader:
         """Carga un mundo generado"""
         self.colors = world_data['colors']
         self.world_name = world_data['name']
+        self.music_file = world_data['music']
         
         # Crear plataformas
         self.platforms = self._create_platforms(world_data['platforms'])

@@ -19,6 +19,7 @@ from collision_manager import CollisionManager
 from camera import Camera
 from ui_renderer import UIRenderer
 from world_loader import WorldLoader
+from audio_manager import play_world_music
 
 
 class Game:
@@ -71,12 +72,17 @@ class Game:
         self.event_manager.subscribe(game_over_checker)
         
         # Guardador de checkpoints
-        checkpoint_saver = CheckpointSaver(self.checkpoint_manager, self.player)
-        self.event_manager.subscribe(checkpoint_saver)
+        self.checkpoint_saver = CheckpointSaver(self.checkpoint_manager)
+        self.checkpoint_saver.set_game(self)  # Asignar referencia al juego
+        self.event_manager.subscribe(self.checkpoint_saver)
     
     def load_world(self, world_data):
         """Carga un mundo - Delega al WorldLoader"""
         self.world_loader.load_world(world_data)
+        
+        # Reproducir música del mundo
+        if self.world_loader.music_file:
+            play_world_music(self.world_loader.music_file)
         
         # Resetear jugador y sistemas
         self.player = Player(100, 100)

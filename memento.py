@@ -45,7 +45,7 @@ class CheckpointManager:
         return self._checkpoints.get(checkpoint_id)
     
     def get_last_checkpoint(self):
-        if self._current_checkpoint is not None:  # ← Correcto
+        if self._current_checkpoint is not None:
             return self._checkpoints.get(self._current_checkpoint)
         return None
 

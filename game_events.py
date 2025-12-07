@@ -135,14 +135,21 @@ class GameOverChecker(GameEventObserver):
 class CheckpointSaver(GameEventObserver):
     """Observador que guarda checkpoints automáticamente"""
     
-    def __init__(self, checkpoint_manager, player):
+    def __init__(self, checkpoint_manager):
         self.checkpoint_manager = checkpoint_manager
-        self.player = player
+        self.game = None  # Se asigna después
+    
+    def set_game(self, game):
+        """Asigna la referencia al juego para acceder al player actual"""
+        self.game = game
     
     def on_game_event(self, event: GameEvent):
         """Guarda checkpoint cuando se activa"""
         if event.event_type == GameEventType.CHECKPOINT_ACTIVATED:
+            if self.game is None:
+                return
+            
             checkpoint_id = event.data.get('checkpoint_id')
             if checkpoint_id is not None:
-                memento = self.player.create_memento()
+                memento = self.game.player.create_memento()
                 self.checkpoint_manager.save_checkpoint(checkpoint_id, memento)
