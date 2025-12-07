@@ -321,6 +321,7 @@ class Checkpoint:
     def activate(self):
         """Activa el checkpoint"""
         self.activated = True
+ 
     
 class Goal:
     """Clase para la meta del nivel"""
@@ -395,52 +396,6 @@ class Goal:
     def activate(self):
         """Marca la meta como alcanzada"""
         self.reached = True
-
-
-class PowerUP(ABC):
-    def __init__(self, x, y, sprite_name):
-        self.x = x
-        self.y = y
-        self.width = POWERUP_WIDTH
-        self.height = POWERUP_HEIGHT
-        
-        self.collected = False
-        self.image = None
-
-        # Cargar sprite único, al estilo Player/Enemy
-        sprite_file = f"{POWERUP_SPRITE_PATH}{sprite_name}{POWERUP_SPRITE_EXTENSION}"
-        try:
-            img = pygame.image.load(sprite_file)
-            img = pygame.transform.scale(img, (self.width, self.height))
-            self.image = img
-        except pygame.error as e:
-            print(f"Error cargando PowerUp {sprite_file}: {e}")
-            self.image = None
-
-    @abstractmethod
-    def draw(self, screen, camera_x):
-        """Dibuja el PowerUp (coordenadas con cámara)"""
-        pass
-    
-    @abstractmethod
-    def power(self, player):
-        """Aplica el efecto concreto al jugador"""
-        pass
-
-    # Helper común para las subclases
-    def _draw_base(self, screen, camera_x):
-        if self.collected:
-            return
-        
-        screen_x = self.x - camera_x
-        if self.image:
-            screen.blit(self.image, (screen_x, self.y))
-        else:
-            # Fallback: rectángulo amarillo si falla el sprite
-            pygame.draw.rect(
-                screen, (255, 255, 0),
-                (screen_x, self.y, self.width, self.height)
-            )
 
 class Game:
     """Clase principal del juego - MODIFICADA para Flyweight"""

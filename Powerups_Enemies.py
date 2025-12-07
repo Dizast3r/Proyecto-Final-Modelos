@@ -202,6 +202,18 @@ class EnemyContext:
         self.width = width
         self.height = height
         
+        # Padding para el rectángulo
+        self.padding_x = 6
+        self.padding_top = 12
+        
+        # Rectángulo ÚNICO (usado para TODO)
+        self.rect = pygame.Rect(
+            self.x + self.padding_x,
+            self.y + self.padding_top,  # ← Empieza más abajo
+            self.width - 2 * self.padding_x,
+            self.height - self.padding_top  # ← Más corto
+        )
+        
         # Física
         self.velocity_x = -2
         self.velocity_y = 0
@@ -270,7 +282,7 @@ class EnemyContext:
         self.facing_right = not self.facing_right
     
     def update(self, platforms, spikes, checkpoints, goal):
-        """Actualiza lógica del enemigo (igual que antes)"""
+        """Actualiza lógica del enemigo"""
         if not self.alive:
             self.death_timer += 1
             self.update_animation()
@@ -284,9 +296,12 @@ class EnemyContext:
         self.x += self.velocity_x
         self.y += self.velocity_y
         
-        # Colisiones (código existente...)
+        # Actualizar rectángulo
+        self.rect.x = self.x + self.padding_x
+        self.rect.y = self.y + self.padding_top
+        
+        # Colisiones con plataformas
         self.on_ground = False
-        enemy_rect = pygame.Rect(self.x, self.y, self.width, self.height)
         
         for platform in platforms:
             platform_rect = pygame.Rect(
@@ -294,19 +309,22 @@ class EnemyContext:
                 platform['width'], platform['height']
             )
             
-            if enemy_rect.colliderect(platform_rect):
+            if self.rect.colliderect(platform_rect):
                 if self.velocity_y > 0:
                     self.y = platform['y'] - self.height
                     self.velocity_y = 0
                     self.on_ground = True
+                    # Actualizar rect después de ajustar y
+                    self.rect.y = self.y + self.padding_top
                 elif self.velocity_y < 0:
                     self.y = platform['y'] + platform['height']
                     self.velocity_y = 0
+                    # Actualizar rect después de ajustar y
+                    self.rect.y = self.y + self.padding_top
         
         self.update_animation()
-        # Detección de obstáculos (simplificado)
+        # Detección de obstáculos
         self._check_obstacles(spikes, checkpoints, goal)
-        
     
     def _check_obstacles(self, spikes, checkpoints, goal):
         """Detecta obstáculos y cambia dirección"""
@@ -316,13 +334,17 @@ class EnemyContext:
         detection_distance = 50
         if not self.facing_right:
             detection_rect = pygame.Rect(
-                self.x - detection_distance, self.y,
-                detection_distance, self.height
+                self.rect.x - detection_distance,
+                self.rect.y,
+                detection_distance,
+                self.rect.height
             )
         else:
             detection_rect = pygame.Rect(
-                self.x + self.width, self.y,
-                detection_distance, self.height
+                self.rect.x + self.rect.width,
+                self.rect.y,
+                detection_distance,
+                self.rect.height
             )
         
         # Verificar colisiones
@@ -340,19 +362,8 @@ class EnemyContext:
             self.change_direction()
     
     def get_rect(self) -> pygame.Rect:
-        """
-        Rectángulo de colisión del enemigo.
-        Reducido desde arriba para facilitar el aplastamiento.
-        """
-        padding_x = 6
-        padding_top = 12  # Reducir hitbox desde arriba
-        
-        return pygame.Rect(
-            self.x + padding_x,
-            self.y + padding_top,  # Comienza más abajo
-            self.width - 2 * padding_x,
-            self.height - padding_top  # Altura reducida
-        )
+        """Retorna el rectángulo de colisión (usado para TODO)"""
+        return self.rect
     
     def die(self):
         """Mata al enemigo"""
