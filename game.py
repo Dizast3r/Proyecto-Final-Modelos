@@ -811,10 +811,6 @@ class Game:
                 # fallback genérico por si llega un tipo raro
                 pu = PowerSpeedIncrease(x, y)
 
-            # Marcar atributo collected en False, si la clase base aún no lo tiene
-            if not hasattr(pu, 'collected'):
-                pu.collected = False
-
             self.powerups.append(pu)
         
         # Resetear jugador
