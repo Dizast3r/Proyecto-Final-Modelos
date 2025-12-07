@@ -276,8 +276,6 @@ class EnemyContext:
             self.update_animation()
             return
         
-        self.update_animation()
-        
         # Física
         self.velocity_y += self.gravity
         if self.velocity_y > 20:
@@ -305,8 +303,10 @@ class EnemyContext:
                     self.y = platform['y'] + platform['height']
                     self.velocity_y = 0
         
+        self.update_animation()
         # Detección de obstáculos (simplificado)
         self._check_obstacles(spikes, checkpoints, goal)
+        
     
     def _check_obstacles(self, spikes, checkpoints, goal):
         """Detecta obstáculos y cambia dirección"""

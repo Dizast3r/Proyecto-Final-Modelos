@@ -229,7 +229,7 @@ class Player:
         new_jump_power = self.jump_power + jump_power_increase
         if new_jump_power <= MAX_JUMP_POWER:
             self.jump_power = new_jump_power
-        else: self.speed = MAX_SPEED
+        else: self.jump_power = MAX_JUMP_POWER
         
 class Platform:
     """Clase para las plataformas"""
@@ -441,6 +441,8 @@ class PowerUP(ABC):
                 screen, (255, 255, 0),
                 (screen_x, self.y, self.width, self.height)
             )
+
+
 class Game:
     """Clase principal del juego - MODIFICADA para Flyweight"""
     
@@ -673,18 +675,6 @@ class Game:
         # Eliminar PowerUps recolectados
         self.powerups = [p for p in self.powerups if not p.collected]
         
-        self.check_collisions()
-        self.update_camera()
-        """Actualiza la lógica del juego"""
-        platform_data = [{'x': p.x, 'y': p.y, 'width': p.width, 
-                         'height': p.height} for p in self.platforms]
-        self.player.update(platform_data, self.world_width)
-        for enemy in self.enemies:
-            enemy.update(platform_data, self.spikes, self.checkpoints, self.goal)
-        
-        #Eliminar enemigos muertos (después de 2 segundos)
-        self.enemies = [enemy for enemy in self.enemies if not enemy.should_be_removed()]
-        self.powerups = [p for p in self.powerups if not getattr(p, 'collected', False)]
         self.check_collisions()
         self.update_camera()
     
