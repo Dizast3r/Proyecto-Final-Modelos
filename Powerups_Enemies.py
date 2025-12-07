@@ -340,11 +340,18 @@ class EnemyContext:
             self.change_direction()
     
     def get_rect(self) -> pygame.Rect:
-        """Rectángulo de colisión"""
+        """
+        Rectángulo de colisión del enemigo.
+        Reducido desde arriba para facilitar el aplastamiento.
+        """
         padding_x = 6
+        padding_top = 12  # Reducir hitbox desde arriba
+        
         return pygame.Rect(
-            self.x + padding_x, self.y,
-            self.width - 2 * padding_x, self.height
+            self.x + padding_x,
+            self.y + padding_top,  # Comienza más abajo
+            self.width - 2 * padding_x,
+            self.height - padding_top  # Altura reducida
         )
     
     def die(self):

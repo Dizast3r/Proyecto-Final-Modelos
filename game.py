@@ -584,7 +584,7 @@ class Game:
             if player_rect.colliderect(enemy_rect):
                 # Determinar tipo de colisión
                 player_bottom = self.player.y + self.player.height
-                enemy_top = enemy.y
+                enemy_top = enemy_rect.y
                 
                 # Si el jugador viene desde arriba (aplastando)
                 if self.player.velocity_y > 0 and player_bottom < enemy_top + 15:
