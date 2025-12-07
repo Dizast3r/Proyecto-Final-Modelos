@@ -297,11 +297,8 @@ class WorldGenerator(ABC):
             world_data['goal'], world_data['enemies'], world_data['spikes']
         )
         
-        # 3. Características especiales del mundo
+
         world_data['music'] = f"{WorldConstants.WORLD_MUSIC_PATH}{config.music_file}"
-        
-        if config.special_features:
-            world_data.update(config.special_features)
         
         return world_data
     
