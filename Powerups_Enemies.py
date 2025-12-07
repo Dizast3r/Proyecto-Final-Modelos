@@ -322,12 +322,14 @@ class EnemyContext:
                     self.y = platform['y'] - self.height
                     self.velocity_y = 0
                     self.on_ground = True
-                    # Actualizar rect después de ajustar y
+                    # Actualizar rect completo
+                    self.rect.x = self.x + self.padding_x
                     self.rect.y = self.y + self.padding_top
                 elif self.velocity_y < 0:
                     self.y = platform['y'] + platform['height']
                     self.velocity_y = 0
-                    # Actualizar rect después de ajustar y
+                    # Actualizar rect completo
+                    self.rect.x = self.x + self.padding_x
                     self.rect.y = self.y + self.padding_top
         
         self.update_animation()
@@ -399,8 +401,13 @@ class PowerUpContext:
         self.y = y
         self.width = width
         self.height = height
-        self.powerup_type = powerup_type  # 'speed', 'jump', 'life'
+        self.powerup_type = powerup_type
         self.collected = False
+
+        # ✨ STRATEGY PATTERN: Inyección de dependencia
+        # Cada PowerUp tiene su estrategia específica
+        self._strategy = PowerUpStrategyFactory.create_strategy(powerup_type)
+
         
         # FLYWEIGHT: Compartido entre todos los PowerUps del mismo tipo
         self._sprite_flyweight = SpriteFlyweightFactory.get_flyweight(
@@ -435,15 +442,150 @@ class PowerUpContext:
         )
     
     def apply_power(self, player):
-        """Aplica el efecto al jugador"""
-        if self.powerup_type == 'speed':
-            player.increase_speed(3)
-            print("⚡ Speed boost!")
-        elif self.powerup_type == 'jump':
-            player.increase_jump_power(2)
-            print("🦘 Jump boost!")
-        elif self.powerup_type == 'life':
-            player.get_life()
-            print("❤️ Extra life!")
+        """
+        Aplica el efecto al jugador usando Strategy Pattern
+        """
+        # ✨ Delegación a la estrategia
+        self._strategy.apply(player)
         
+        # Marcar como recolectado
         self.collected = True
+
+"""
+STRATEGY PATTERN - Estrategias para diferentes tipos de PowerUps
+Cada estrategia encapsula el comportamiento de un tipo de PowerUp específico
+"""
+
+from abc import ABC, abstractmethod
+
+
+class PowerUpStrategy(ABC):
+    """
+    Interfaz Strategy - Define el contrato para todas las estrategias de PowerUp
+    """
+    
+    @abstractmethod
+    def apply(self, player):
+        """
+        Aplica el efecto del PowerUp al jugador
+        
+        Args:
+            player: Instancia del jugador que recibe el efecto
+        """
+        pass
+    
+    @abstractmethod
+    def get_type_name(self) -> str:
+        """Retorna el nombre del tipo de PowerUp para eventos"""
+        pass
+
+
+class SpeedBoostStrategy(PowerUpStrategy):
+    """
+    Estrategia para PowerUp de velocidad
+    Aumenta la velocidad de movimiento del jugador
+    """
+    
+    def __init__(self, speed_increase: int = 3):
+        """
+        Args:
+            speed_increase: Cantidad de velocidad a aumentar (default: 3)
+        """
+        self.speed_increase = speed_increase
+    
+    def apply(self, player):
+        """Aumenta la velocidad del jugador"""
+        player.increase_speed(self.speed_increase)
+    
+    def get_type_name(self) -> str:
+        return 'speed'
+
+
+class JumpBoostStrategy(PowerUpStrategy):
+    """
+    Estrategia para PowerUp de salto
+    Aumenta la potencia de salto del jugador
+    """
+    
+    def __init__(self, jump_increase: int = 2):
+        """
+        Args:
+            jump_increase: Cantidad de potencia de salto a aumentar (default: 2)
+        """
+        self.jump_increase = jump_increase
+    
+    def apply(self, player):
+        """Aumenta la potencia de salto del jugador"""
+        player.increase_jump_power(self.jump_increase)
+    
+    def get_type_name(self) -> str:
+        return 'jump'
+
+
+class LifeBoostStrategy(PowerUpStrategy):
+    """
+    Estrategia para PowerUp de vida extra
+    Otorga una vida adicional al jugador
+    """
+    
+    def apply(self, player):
+        """Otorga una vida extra al jugador"""
+        player.get_life()
+    
+    def get_type_name(self) -> str:
+        return 'life'
+
+
+class PowerUpStrategyFactory:
+    """
+    Factory para crear estrategias de PowerUp
+    Centraliza la lógica de creación y permite configuración
+    """
+    
+    # Registro de estrategias disponibles
+    _strategies = {
+        'speed': SpeedBoostStrategy,
+        'jump': JumpBoostStrategy,
+        'life': LifeBoostStrategy
+    }
+    
+    @classmethod
+    def create_strategy(cls, powerup_type: str, **kwargs) -> PowerUpStrategy:
+        """
+        Crea una estrategia basada en el tipo de PowerUp
+        
+        Args:
+            powerup_type: Tipo de PowerUp ('speed', 'jump', 'life')
+            **kwargs: Parámetros opcionales para la estrategia
+                     (ej: speed_increase=5, jump_increase=3)
+        
+        Returns:
+            Instancia de la estrategia correspondiente
+        
+        Raises:
+            ValueError: Si el tipo de PowerUp no está registrado
+        """
+        if powerup_type not in cls._strategies:
+            raise ValueError(
+                f"PowerUp tipo '{powerup_type}' no reconocido. "
+                f"Tipos disponibles: {list(cls._strategies.keys())}"
+            )
+        
+        strategy_class = cls._strategies[powerup_type]
+        return strategy_class(**kwargs)
+    
+    @classmethod
+    def register_strategy(cls, powerup_type: str, strategy_class):
+        """
+        Registra una nueva estrategia (para extensibilidad futura) 
+        Args:
+            powerup_type: Identificador del tipo de PowerUp
+            strategy_class: Clase de estrategia que implementa PowerUpStrategy
+        """
+        cls._strategies[powerup_type] = strategy_class
+        print(f"✅ Estrategia '{powerup_type}' registrada")
+    
+    @classmethod
+    def get_available_types(cls) -> list:
+        """Retorna lista de tipos de PowerUp disponibles"""
+        return list(cls._strategies.keys())
