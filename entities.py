@@ -48,6 +48,9 @@ class Player:
         
         # Imagen actual
         self.image = self.idle_sprite
+
+        #Guardar spawn Inicial
+        self._initial_spawn_memento = self.create_memento()
     
     def move_left(self):
         """Movimiento a la izquierda"""
@@ -157,6 +160,13 @@ class Player:
             self.velocity_y = state['velocity_y']
             self.speed = state['speed']
             self.jump_power = state['jump_power']
+
+    def reset_to_initial_spawn(self):
+        """        
+        Este método usa el memento guardado en __init__ para restaurar
+        completamente el jugador a su estado original (sin PowerUps)
+        """
+        self.restore_from_memento(self._initial_spawn_memento)
     
     def get_rect(self):
         """Retorna el rectángulo de colisión (con padding)"""

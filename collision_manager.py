@@ -113,16 +113,17 @@ class CollisionManager:
         self.event_manager.notify(event)
         
         if still_alive:
-            # Restaurar desde checkpoint
+            # Intentar restaurar desde checkpoint
             memento = self.checkpoint_manager.get_last_checkpoint()
+            
             if memento:
+                #Hay checkpoint: restaurar desde ahí (con PowerUps)
                 player.restore_from_memento(memento)
+                print("🔄 Restaurado desde último checkpoint")
             else:
-                # No hay checkpoint, volver al inicio
-                player.x = 100
-                player.y = 100
-                player.velocity_x = 0
-                player.velocity_y = 0
+                #NO hay checkpoint: resetear al spawn inicial (sin PowerUps)
+                player.reset_to_initial_spawn()
+                print("🔄 Sin checkpoints, spawn inicial")
             
             # Notificar evento de respawn
             event = GameEvent(GameEventType.PLAYER_RESPAWNED, {})
