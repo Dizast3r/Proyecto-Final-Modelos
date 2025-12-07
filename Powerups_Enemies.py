@@ -281,12 +281,20 @@ class EnemyContext:
         self.velocity_x *= -1
         self.facing_right = not self.facing_right
     
-    def update(self, platforms, spikes, checkpoints, goal):
+    def update(self, platforms, spikes, checkpoints, goal, world_width):
         """Actualiza lógica del enemigo"""
         if not self.alive:
             self.death_timer += 1
             self.update_animation()
             return
+        
+        #Limitar Enemigos Al Mundo
+        if self.x < 0:
+            self.x = 0
+            self.change_direction()
+        elif self.x + self.width > world_width:
+            self.x = world_width - self.width
+            self.change_direction()
         
         # Física
         self.velocity_y += self.gravity

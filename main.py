@@ -1,5 +1,5 @@
 """
-MAIN - Programa principal que integra todos los patrones
+MAIN - Programa principal refactorizado
 Ejecuta este archivo para jugar
 """
 
@@ -11,6 +11,7 @@ ANCHO_DEL_MUNDO = 3000
 ANCHO_VENTANA = 1600
 ALTO_VENTANA = 600
 
+
 def main():
     # Crear el juego
     game = Game(ANCHO_VENTANA, ALTO_VENTANA, ANCHO_DEL_MUNDO)
@@ -21,6 +22,7 @@ def main():
     ice_generator = IceWorldGenerator()
     
     # Generar mundos
+    print("\n🔨 Generando mundos...")
     worlds = {
         'grass': grass_generator.generate_world(game.world_width, game.height),
         'desert': desert_generator.generate_world(game.world_width, game.height),
@@ -31,13 +33,15 @@ def main():
     current_world_key = 'grass'
     game.load_world(worlds[current_world_key])
     
-    print("=" * 50)
-    print("JUEGO DE SALTOS - PATRONES DE DISEÑO")
-    print("=" * 50)
+    print("\n" + "=" * 60)
+    print("SUPER KIRBY BRO - PATRONES DE DISEÑO")
+    print("=" * 60)
     print("\n🎮 PATRONES IMPLEMENTADOS:")
     print("  1. COMMAND PATTERN - Controles del personaje")
     print("  2. MEMENTO PATTERN - Sistema de checkpoints")
     print("  3. TEMPLATE METHOD PATTERN - Generación de mundos")
+    print("  4. FLYWEIGHT PATTERN - Optimización de sprites")
+    print("  5. OBSERVER PATTERN - Sistema de eventos")
     print("\n🕹️  CONTROLES:")
     print("  ← → / A D : Mover")
     print("  Espacio / ↑ / W : Saltar")
@@ -48,8 +52,10 @@ def main():
     print("\n⭐ OBJETIVO:")
     print("  - Llega a los checkpoints (banderas doradas)")
     print("  - Evita las espinas/trampas")
+    print("  - Derrota enemigos saltando sobre ellos")
+    print("  - Recolecta PowerUps (velocidad, salto, vida)")
     print("  - Si mueres, revives en el último checkpoint")
-    print("=" * 50)
+    print("=" * 60)
     print("\n¡Iniciando juego...\n")
     
     # Loop principal del juego con cambio de mundos
@@ -67,15 +73,12 @@ def main():
                 elif event.key == pygame.K_1:
                     current_world_key = 'grass'
                     game.load_world(worlds[current_world_key])
-                    print(f"\n🌱 Cargando: {worlds[current_world_key]['name']}")
                 elif event.key == pygame.K_2:
                     current_world_key = 'desert'
                     game.load_world(worlds[current_world_key])
-                    print(f"\n🏜️  Cargando: {worlds[current_world_key]['name']}")
                 elif event.key == pygame.K_3:
                     current_world_key = 'ice'
                     game.load_world(worlds[current_world_key])
-                    print(f"\n❄️  Cargando: {worlds[current_world_key]['name']}")
         
         # Input (Command Pattern)
         keys = pygame.key.get_pressed()
