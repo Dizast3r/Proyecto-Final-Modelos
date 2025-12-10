@@ -5,7 +5,7 @@ Optimiza memoria almacenando sprites una sola vez y compartiéndolos
 
 import pygame
 from typing import Dict, List, Optional
-
+from abc import ABC, abstractmethod
 
 class SpriteFlyweight:
     """
@@ -182,188 +182,13 @@ class SpriteFlyweightFactory:
             'total_flyweights': len(cls._flyweights),
             'types': list(cls._flyweights.keys())
         }
-
-
 # ============================================================================
 # CLASES CONTEXTO - Estado extrínseco (único por instancia)
 # ============================================================================
 
 """
-FLYWEIGHT PATTERN - Para compartir sprites entre múltiples instancias
-✅ MODIFICADO: Enemigos ahora atraviesan espinas sin quedarse atascados
+EnemyContext
 """
-
-import pygame
-from typing import Dict, List, Optional
-
-
-class SpriteFlyweight:
-    """
-    Flyweight: Contiene el estado intrínseco (compartido) - los sprites cargados
-    Este objeto es inmutable y se comparte entre múltiples instancias
-    """
-    
-    def __init__(self, sprite_type: str, sprites: List[pygame.Surface], 
-                 death_sprite: Optional[pygame.Surface] = None):
-        self._sprite_type = sprite_type
-        self._sprites = sprites
-        self._death_sprite = death_sprite
-    
-    @property
-    def sprite_type(self) -> str:
-        return self._sprite_type
-    
-    @property
-    def sprites(self) -> List[pygame.Surface]:
-        return self._sprites
-    
-    @property
-    def death_sprite(self) -> Optional[pygame.Surface]:
-        return self._death_sprite
-    
-    def get_sprite(self, index: int) -> pygame.Surface:
-        """Obtiene un sprite específico de la animación"""
-        if 0 <= index < len(self._sprites):
-            return self._sprites[index]
-        return self._sprites[0] if self._sprites else None
-    
-    def get_sprite_count(self) -> int:
-        """Retorna el número de sprites en la animación"""
-        return len(self._sprites)
-
-
-class SpriteFlyweightFactory:
-    """
-    Factory: Gestiona la creación y caché de Flyweights
-    Asegura que solo exista una instancia de cada tipo de sprite
-    """
-    
-    _flyweights: Dict[str, SpriteFlyweight] = {}
-    
-    @classmethod
-    def get_flyweight(cls, sprite_type: str, width: int, height: int) -> SpriteFlyweight:
-        """
-        Obtiene o crea un Flyweight para el tipo de sprite solicitado
-        """
-        key = f"{sprite_type}_{width}x{height}"
-        
-        if key in cls._flyweights:
-            return cls._flyweights[key]
-        
-        flyweight = cls._create_flyweight(sprite_type, width, height)
-        cls._flyweights[key] = flyweight
-        
-        print(f"✨ Flyweight creado: {key} (Total en caché: {len(cls._flyweights)})")
-        
-        return flyweight
-    
-    @classmethod
-    def _create_flyweight(cls, sprite_type: str, width: int, height: int) -> SpriteFlyweight:
-        """Crea un nuevo Flyweight cargando los sprites del disco"""
-        
-        if sprite_type == 'enemy':
-            return cls._load_enemy_sprites(width, height)
-        elif sprite_type.startswith('powerup_'):
-            powerup_subtype = sprite_type.split('_')[1]
-            return cls._load_powerup_sprite(powerup_subtype, width, height)
-        else:
-            raise ValueError(f"Tipo de sprite desconocido: {sprite_type}")
-    
-    @classmethod
-    def _load_enemy_sprites(cls, width: int, height: int) -> SpriteFlyweight:
-        """Carga los sprites del enemigo"""
-        SPRITE_ENEMY_PATH = 'Assets/EnemySprites/'
-        ENEMY_SPRITE_COUNT = 3
-        ENEMY_SPRITE_PREFIX = 'Sprite'
-        ENEMY_SPRITE_EXTENSION = '.png'
-        ENEMY_SPRITE_DEATH = 'SpriteDeath.png'
-        
-        sprites = []
-        
-        for i in range(1, ENEMY_SPRITE_COUNT + 1):
-            try:
-                sprite_file = f'{SPRITE_ENEMY_PATH}{ENEMY_SPRITE_PREFIX}{i}{ENEMY_SPRITE_EXTENSION}'
-                img = pygame.image.load(sprite_file)
-                img = pygame.transform.scale(img, (width, height))
-                sprites.append(img)
-            except pygame.error as e:
-                print(f"⚠️ Error cargando {sprite_file}: {e}")
-                placeholder = cls._create_placeholder(width, height, (255, 100, 0))
-                sprites.append(placeholder)
-        
-        death_sprite = None
-        try:
-            death_file = f'{SPRITE_ENEMY_PATH}{ENEMY_SPRITE_DEATH}'
-            death_sprite = pygame.image.load(death_file)
-            death_sprite = pygame.transform.scale(death_sprite, (width, height))
-        except pygame.error as e:
-            print(f"⚠️ Error cargando sprite de muerte: {e}")
-            death_sprite = cls._create_placeholder(width, height, (100, 100, 100))
-        
-        return SpriteFlyweight('enemy', sprites, death_sprite)
-    
-    @classmethod
-    def _load_powerup_sprite(cls, powerup_type: str, width: int, height: int) -> SpriteFlyweight:
-        """Carga el sprite de un PowerUp"""
-        POWERUP_SPRITE_PATH = 'Assets/PowerUpSprites/'
-        POWERUP_SPRITE_EXTENSION = '.png'
-        
-        sprite_names = {
-            'speed': 'SpriteSpeed',
-            'jump': 'SpriteJump',
-            'life': 'SpriteLife'
-        }
-        
-        sprite_name = sprite_names.get(powerup_type, 'SpriteSpeed')
-        sprite_file = f"{POWERUP_SPRITE_PATH}{sprite_name}{POWERUP_SPRITE_EXTENSION}"
-        
-        try:
-            img = pygame.image.load(sprite_file)
-            img = pygame.transform.scale(img, (width, height))
-            sprites = [img]
-        except pygame.error as e:
-            print(f"⚠️ Error cargando {sprite_file}: {e}")
-            colors = {'speed': (0, 255, 255), 'jump': (255, 0, 255), 'life': (255, 255, 0)}
-            color = colors.get(powerup_type, (255, 255, 0))
-            sprites = [cls._create_placeholder(width, height, color)]
-        
-        return SpriteFlyweight(f'powerup_{powerup_type}', sprites)
-    
-    @classmethod
-    def _create_placeholder(cls, width: int, height: int, color: tuple) -> pygame.Surface:
-        """Crea un sprite placeholder cuando falla la carga"""
-        surface = pygame.Surface((width, height))
-        surface.fill(color)
-        pygame.draw.rect(surface, (0, 0, 0), (0, 0, width, height), 2)
-        return surface
-    
-    @classmethod
-    def clear_cache(cls):
-        """Limpia la caché de Flyweights"""
-        cls._flyweights.clear()
-        print("🗑️ Caché de Flyweights limpiada")
-    
-    @classmethod
-    def get_cache_info(cls) -> Dict[str, int]:
-        """Retorna información sobre la caché"""
-        return {
-            'total_flyweights': len(cls._flyweights),
-            'types': list(cls._flyweights.keys())
-        }
-
-
-# ============================================================================
-# CLASES CONTEXTO - Estado extrínseco (único por instancia)
-# ============================================================================
-
-"""
-EnemyContext - VERSIÓN SIMPLIFICADA
-✅ Ignora espinas por 5 segundos si cambia de dirección más de 2 veces en 1 segundo
-"""
-
-import pygame
-
-
 class EnemyContext:
     """
     Contexto del Enemy con sistema simple de detección de atasco
@@ -661,9 +486,6 @@ class PowerUpContext:
 STRATEGY PATTERN - Estrategias para diferentes tipos de PowerUps
 Cada estrategia encapsula el comportamiento de un tipo de PowerUp específico
 """
-
-from abc import ABC, abstractmethod
-
 
 class PowerUpStrategy(ABC):
     """
