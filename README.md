@@ -1,4 +1,4 @@
-# Super Kirby Bro - Proyecto Final Modelos de Programación II
+# Super Kirby Bro - Proyecto Final Modelos de Programación
 
 ## 👥 Integrantes
 - **Jorge Miguel Méndez Barón** — 20241020030
