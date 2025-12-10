@@ -15,11 +15,17 @@ El proyecto destaca por su arquitectura de software modular y la implementación
 El diagrama de el proyecto a continuación implementa 7 patrones de diseño:
 
 **Observer** : Para notificación automática
+
 **Strategy** : Para cambiar algoritmos en tiempo de ejecución
+
 **Command** : Para ejecutar acciones con historial y deshacer
+
 **Memento** : Para guardar y restaurar estados
+
 **Template Method** : Para definir algoritmos generales que se especializan
+
 **Registry (Service Locator)** : Para localizar servicios globales
+
 **Flyweight** : Para optimizar objetos pesados reutilizables
 
 <img width="2338" height="668" alt="image" src="https://github.com/user-attachments/assets/8f8c73b2-e721-4976-aaec-f3073eacda08" />
