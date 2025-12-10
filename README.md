@@ -29,7 +29,7 @@ El diagrama de el proyecto a continuación implementa 7 patrones de diseño:
 **Flyweight** : Para optimizar objetos pesados reutilizables
 
 <img width="2338" height="668" alt="image" src="https://github.com/user-attachments/assets/8f8c73b2-e721-4976-aaec-f3073eacda08" />
----
+
 
 ## 🏗️ Arquitectura y Patrones de Diseño Aplicados
 
