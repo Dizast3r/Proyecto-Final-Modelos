@@ -1,6 +1,12 @@
 """
-FLYWEIGHT PATTERN - Para compartir sprites entre múltiples instancias
-Optimiza memoria almacenando sprites una sola vez y compartiéndolos
+Patron de Diseno Flyweight:
+Este modulo implementa el patron Flyweight para optimizar el uso de memoria
+compartiendo recursos graficos (sprites) entre multiples instancias de enemigos
+y powerups.
+
+Patron de Diseno Strategy:
+Se utiliza para definir familias de algoritmos para los powerups (velocidad,
+salto, vida), encapsulando cada uno y haciendolos intercambiables.
 """
 
 import pygame
@@ -9,20 +15,23 @@ from abc import ABC, abstractmethod
 
 class SpriteFlyweight:
     """
-    Flyweight: Contiene el estado intrínseco (compartido) - los sprites cargados
-    Este objeto es inmutable y se comparte entre múltiples instancias
+    Clase Flyweight que mantiene el estado intrinseco (compartido).
+    Almacena los sprites que son comunes a todas las instancias del mismo tipo,
+    evitando cargar la misma imagen multiples veces en memoria.
     """
     
     def __init__(self, sprite_type: str, sprites: List[pygame.Surface], 
                  death_sprite: Optional[pygame.Surface] = None):
         """
+        Inicializa el Flyweight con los recursos graficos compartidos.
+        
         Args:
-            sprite_type: Tipo de sprite ('enemy', 'powerup_speed', etc.)
-            sprites: Lista de sprites de animación
-            death_sprite: Sprite opcional de muerte (para enemigos)
+            sprite_type: Identificador del tipo de sprite.
+            sprites: Lista de imagenes para la animacion.
+            death_sprite: Imagen opcional para el estado de muerte.
         """
         self._sprite_type = sprite_type
-        self._sprites = sprites  # Lista inmutable de sprites
+        self._sprites = sprites
         self._death_sprite = death_sprite
     
     @property
@@ -38,20 +47,20 @@ class SpriteFlyweight:
         return self._death_sprite
     
     def get_sprite(self, index: int) -> pygame.Surface:
-        """Obtiene un sprite específico de la animación"""
+        """Retorna un sprite especifico de la secuencia de animacion."""
         if 0 <= index < len(self._sprites):
             return self._sprites[index]
         return self._sprites[0] if self._sprites else None
     
     def get_sprite_count(self) -> int:
-        """Retorna el número de sprites en la animación"""
         return len(self._sprites)
 
 
 class SpriteFlyweightFactory:
     """
-    Factory: Gestiona la creación y caché de Flyweights
-    Asegura que solo exista una instancia de cada tipo de sprite
+    Factoria para el patron Flyweight.
+    Gestiona el almacenamiento y recuperacion de los objetos Flyweight,
+    asegurando que se compartan las instancias existentes.
     """
     
     _flyweights: Dict[str, SpriteFlyweight] = {}
@@ -59,46 +68,36 @@ class SpriteFlyweightFactory:
     @classmethod
     def get_flyweight(cls, sprite_type: str, width: int, height: int) -> SpriteFlyweight:
         """
-        Obtiene o crea un Flyweight para el tipo de sprite solicitado
-        
-        Args:
-            sprite_type: 'enemy', 'powerup_speed', 'powerup_jump', 'powerup_life'
-            width: Ancho del sprite
-            height: Alto del sprite
-        
-        Returns:
-            SpriteFlyweight compartido
+        Obtiene una instancia existente de Flyweight o crea una nueva si no existe.
+        Utiliza una clave basada en el tipo y las dimensiones para identificarlo.
         """
-        # Clave única para este tipo y tamaño
         key = f"{sprite_type}_{width}x{height}"
         
-        # Si ya existe, retornarlo (compartido)
         if key in cls._flyweights:
             return cls._flyweights[key]
         
-        # Si no existe, crearlo y cachearlo
         flyweight = cls._create_flyweight(sprite_type, width, height)
         cls._flyweights[key] = flyweight
         
-        print(f"✨ Flyweight creado: {key} (Total en caché: {len(cls._flyweights)})")
+        print(f"Flyweight creado: {key} (Total en cache: {len(cls._flyweights)})")
         
         return flyweight
     
     @classmethod
     def _create_flyweight(cls, sprite_type: str, width: int, height: int) -> SpriteFlyweight:
-        """Crea un nuevo Flyweight cargando los sprites del disco"""
+        """Metodo interno para cargar los recursos y crear el Flyweight."""
         
         if sprite_type == 'enemy':
             return cls._load_enemy_sprites(width, height)
         elif sprite_type.startswith('powerup_'):
-            powerup_subtype = sprite_type.split('_')[1]  # 'speed', 'jump', 'life'
+            powerup_subtype = sprite_type.split('_')[1]
             return cls._load_powerup_sprite(powerup_subtype, width, height)
         else:
             raise ValueError(f"Tipo de sprite desconocido: {sprite_type}")
     
     @classmethod
     def _load_enemy_sprites(cls, width: int, height: int) -> SpriteFlyweight:
-        """Carga los sprites del enemigo"""
+        """Carga los recursos graficos para los enemigos."""
         SPRITE_ENEMY_PATH = 'Assets/EnemySprites/'
         ENEMY_SPRITE_COUNT = 3
         ENEMY_SPRITE_PREFIX = 'Sprite'
@@ -107,7 +106,7 @@ class SpriteFlyweightFactory:
         
         sprites = []
         
-        # Cargar sprites de animación
+        # Cargar sprites de animacion
         for i in range(1, ENEMY_SPRITE_COUNT + 1):
             try:
                 sprite_file = f'{SPRITE_ENEMY_PATH}{ENEMY_SPRITE_PREFIX}{i}{ENEMY_SPRITE_EXTENSION}'
@@ -115,8 +114,7 @@ class SpriteFlyweightFactory:
                 img = pygame.transform.scale(img, (width, height))
                 sprites.append(img)
             except pygame.error as e:
-                print(f"⚠️ Error cargando {sprite_file}: {e}")
-                # Crear sprite placeholder
+                print(f"Error cargando {sprite_file}: {e}")
                 placeholder = cls._create_placeholder(width, height, (255, 100, 0))
                 sprites.append(placeholder)
         
@@ -127,14 +125,14 @@ class SpriteFlyweightFactory:
             death_sprite = pygame.image.load(death_file)
             death_sprite = pygame.transform.scale(death_sprite, (width, height))
         except pygame.error as e:
-            print(f"⚠️ Error cargando sprite de muerte: {e}")
+            print(f"Error cargando sprite de muerte: {e}")
             death_sprite = cls._create_placeholder(width, height, (100, 100, 100))
         
         return SpriteFlyweight('enemy', sprites, death_sprite)
     
     @classmethod
     def _load_powerup_sprite(cls, powerup_type: str, width: int, height: int) -> SpriteFlyweight:
-        """Carga el sprite de un PowerUp"""
+        """Carga el sprite unico para un tipo de PowerUp."""
         POWERUP_SPRITE_PATH = 'Assets/PowerUpSprites/'
         POWERUP_SPRITE_EXTENSION = '.png'
         
@@ -150,10 +148,9 @@ class SpriteFlyweightFactory:
         try:
             img = pygame.image.load(sprite_file)
             img = pygame.transform.scale(img, (width, height))
-            sprites = [img]  # PowerUps solo tienen 1 sprite
+            sprites = [img]
         except pygame.error as e:
-            print(f"⚠️ Error cargando {sprite_file}: {e}")
-            # Colores por tipo
+            print(f"Error cargando {sprite_file}: {e}")
             colors = {'speed': (0, 255, 255), 'jump': (255, 0, 255), 'life': (255, 255, 0)}
             color = colors.get(powerup_type, (255, 255, 0))
             sprites = [cls._create_placeholder(width, height, color)]
@@ -162,50 +159,43 @@ class SpriteFlyweightFactory:
     
     @classmethod
     def _create_placeholder(cls, width: int, height: int, color: tuple) -> pygame.Surface:
-        """Crea un sprite placeholder cuando falla la carga"""
+        """Crea un grafico temporal cuando falla la carga de un archivo."""
         surface = pygame.Surface((width, height))
         surface.fill(color)
-        # Borde negro
         pygame.draw.rect(surface, (0, 0, 0), (0, 0, width, height), 2)
         return surface
     
     @classmethod
     def clear_cache(cls):
-        """Limpia la caché de Flyweights (útil para liberar memoria)"""
+        """Limpia la cache de Flyweights liberando memoria."""
         cls._flyweights.clear()
-        print("🗑️ Caché de Flyweights limpiada")
+        print("Cache de Flyweights limpiada")
     
     @classmethod
     def get_cache_info(cls) -> Dict[str, int]:
-        """Retorna información sobre la caché"""
         return {
             'total_flyweights': len(cls._flyweights),
             'types': list(cls._flyweights.keys())
         }
-# ============================================================================
-# CLASES CONTEXTO - Estado extrínseco (único por instancia)
-# ============================================================================
 
-"""
-EnemyContext
-"""
+
 class EnemyContext:
     """
-    Contexto del Enemy con sistema simple de detección de atasco
+    Clase Contexto para Enemigos.
+    Mantiene el estado extrinseco (unico) de cada enemigo, como su posicion,
+    velocidad y estado de vida, mientras referencia al Flyweight para los graficos.
     """
     
     def __init__(self, x: int, y: int, width: int = 40, height: int = 50):
-        # Estado extrínseco
+        # Estado extrinseco (propio de esta instancia)
         self.x = x
         self.y = y
         self.width = width
         self.height = height
         
-        # Padding para el rectángulo
         self.padding_x = 6
         self.padding_top = 12
         
-        # Rectángulo ÚNICO
         self.rect = pygame.Rect(
             self.x + self.padding_x,
             self.y + self.padding_top,
@@ -213,23 +203,19 @@ class EnemyContext:
             self.height - self.padding_top
         )
         
-        # Física
         self.velocity_x = -2
         self.velocity_y = 0
         self.gravity = 0.8
         self.on_ground = False
         
-        # Estado
         self.alive = True
         self.death_timer = 0
         self.death_duration = 120
         
-        # ✅ Sistema SIMPLE: contar cambios de dirección
-        self.direction_changes = 0  # Cambios en la ventana actual
-        self.direction_change_timer = 0  # Timer de ventana (60 frames = 1 segundo)
-        self.ignore_spikes_timer = 0  # Timer para ignorar espinas (300 frames = 5 segundos)
+        self.direction_changes = 0
+        self.direction_change_timer = 0
+        self.ignore_spikes_timer = 0
         
-        # Animación
         self.current_sprite_index = 0
         self.animation_counter = 0
         self.animation_speed = 10
@@ -237,14 +223,14 @@ class EnemyContext:
         self.sequence_index = 0
         self.facing_right = False
         
-        # FLYWEIGHT: Compartido
+        # Referencia al Flyweight (estado intrinseco compartido)
         from Powerups_Enemies import SpriteFlyweightFactory
         self._sprite_flyweight = SpriteFlyweightFactory.get_flyweight(
             'enemy', width, height
         )
     
     def update_animation(self):
-        """Actualiza el índice de animación"""
+        """Gestiona el cambio de cuadro de animacion."""
         if not self.alive:
             return
         
@@ -256,7 +242,7 @@ class EnemyContext:
             self.current_sprite_index = self.sprite_sequence[self.sequence_index]
     
     def get_current_sprite(self) -> pygame.Surface:
-        """Obtiene el sprite actual a dibujar"""
+        """Obtiene el sprite actual desde el Flyweight correspondiente."""
         if not self.alive:
             return self._sprite_flyweight.death_sprite
         
@@ -268,7 +254,6 @@ class EnemyContext:
             return pygame.transform.flip(base_sprite, True, False)
     
     def draw(self, screen: pygame.Surface, camera_x: int):
-        """Dibuja el enemigo"""
         screen_x = self.x - camera_x
         sprite = self.get_current_sprite()
         
@@ -279,42 +264,32 @@ class EnemyContext:
             pygame.draw.rect(screen, color, (screen_x, self.y, self.width, self.height))
     
     def change_direction(self):
-        """
-        ✅ MODIFICADO: Registra cambios de dirección
-        """
+        """Invierte la direccion de movimiento del enemigo."""
         self.velocity_x *= -1
         self.facing_right = not self.facing_right
         
-        # Incrementar contador de cambios
         self.direction_changes += 1
         
-        # Si cambió más de 5 veces en la ventana → IGNORAR espinas por 5 segundos
         if self.direction_changes > 5:
-            self.ignore_spikes_timer = 300  # 300 frames = 5 segundos a 60 FPS
+            self.ignore_spikes_timer = 300
             self.direction_changes = 0
             self.direction_change_timer = 0
     
     def update(self, platforms, spikes, checkpoints, goal, world_width):
-        """
-        Actualiza lógica del enemigo
-        """
+        """Actualiza la logica de movimiento, fisica y colisiones."""
         if not self.alive:
             self.death_timer += 1
             self.update_animation()
             return
         
-        # ✅ Actualizar timers
         if self.ignore_spikes_timer > 0:
             self.ignore_spikes_timer -= 1
         
-        # Timer de ventana de cambios de dirección
         self.direction_change_timer += 1
-        if self.direction_change_timer >= 60:  # 1 segundo
-            # Resetear ventana
+        if self.direction_change_timer >= 60:
             self.direction_changes = 0
             self.direction_change_timer = 0
         
-        # Limitar al mundo
         if self.x < 0:
             self.x = 0
             self.change_direction()
@@ -322,7 +297,6 @@ class EnemyContext:
             self.x = world_width - self.width
             self.change_direction()
         
-        # Física
         self.velocity_y += self.gravity
         if self.velocity_y > 20:
             self.velocity_y = 20
@@ -330,11 +304,9 @@ class EnemyContext:
         self.x += self.velocity_x
         self.y += self.velocity_y
         
-        # Actualizar rectángulo
         self.rect.x = self.x + self.padding_x
         self.rect.y = self.y + self.padding_top
         
-        # Colisiones con plataformas
         self.on_ground = False
         
         for platform in platforms:
@@ -357,14 +329,10 @@ class EnemyContext:
                     self.rect.y = self.y + self.padding_top
         
         self.update_animation()
-        
-        # Detectar obstáculos
         self._check_obstacles(spikes, checkpoints, goal)
     
     def _check_obstacles(self, spikes, checkpoints, goal):
-        """
-        ✅ SIMPLIFICADO: Solo ignora espinas si ignore_spikes_timer > 0
-        """
+        """Verifica colisiones con obstaculos para cambiar de direccion."""
         if not self.alive:
             return
         
@@ -384,7 +352,6 @@ class EnemyContext:
                 self.rect.height
             )
         
-        # ✅ SIEMPRE verificar checkpoints y goal
         for checkpoint in checkpoints:
             if detection_rect.colliderect(checkpoint.get_rect()):
                 self.change_direction()
@@ -394,7 +361,6 @@ class EnemyContext:
             self.change_direction()
             return
         
-        # ✅ Solo verificar espinas si NO está ignorándolas
         if self.ignore_spikes_timer <= 0:
             for spike in spikes:
                 if detection_rect.colliderect(spike.get_rect()):
@@ -402,11 +368,9 @@ class EnemyContext:
                     return
     
     def get_rect(self) -> pygame.Rect:
-        """Retorna el rectángulo de colisión"""
         return self.rect
     
     def die(self):
-        """Mata al enemigo"""
         if self.alive:
             self.alive = False
             self.death_timer = 0
@@ -414,20 +378,18 @@ class EnemyContext:
             self.velocity_y = 0
     
     def should_be_removed(self) -> bool:
-        """Verifica si debe eliminarse"""
         return not self.alive and self.death_timer >= self.death_duration
-
 
 
 class PowerUpContext:
     """
-    Contexto del PowerUp: Estado extrínseco único de cada instancia
-    Comparte el Flyweight con todos los PowerUps del mismo tipo
+    Clase Contexto para PowerUps.
+    Utiliza el patron Flyweight para los sprites y el patron Strategy para
+    definir el comportamiento del efecto cuando es recolectado.
     """
     
     def __init__(self, x: int, y: int, powerup_type: str, 
                  width: int = 40, height: int = 50):
-        # Estado extrínseco
         self.x = x
         self.y = y
         self.width = width
@@ -435,22 +397,18 @@ class PowerUpContext:
         self.powerup_type = powerup_type
         self.collected = False
 
-        # ✨ STRATEGY PATTERN: Inyección de dependencia
-        # Cada PowerUp tiene su estrategia específica
+        # Patron Strategy: Se delega el comportamiento especifico a una estrategia
         self._strategy = PowerUpStrategyFactory.create_strategy(powerup_type)
 
-        
-        # FLYWEIGHT: Compartido entre todos los PowerUps del mismo tipo
+        # Patron Flyweight: Se comparten los graficos
         self._sprite_flyweight = SpriteFlyweightFactory.get_flyweight(
             f'powerup_{powerup_type}', width, height
         )
     
     def get_sprite(self) -> pygame.Surface:
-        """Obtiene el sprite del Flyweight"""
-        return self._sprite_flyweight.get_sprite(0)  # PowerUps tienen 1 solo sprite
+        return self._sprite_flyweight.get_sprite(0)
     
     def draw(self, screen: pygame.Surface, camera_x: int):
-        """Dibuja el PowerUp"""
         if self.collected:
             return
         
@@ -460,12 +418,10 @@ class PowerUpContext:
         if sprite:
             screen.blit(sprite, (screen_x, self.y))
         else:
-            # Fallback
             pygame.draw.rect(screen, (255, 255, 0),
                            (screen_x, self.y, self.width, self.height))
     
     def get_rect(self) -> pygame.Rect:
-        """Rectángulo de colisión con padding"""
         padding = 4
         return pygame.Rect(
             self.x + padding, self.y + padding,
@@ -474,55 +430,45 @@ class PowerUpContext:
     
     def apply_power(self, player):
         """
-        Aplica el efecto al jugador usando Strategy Pattern
+        Ejecuta la estrategia definida para este PowerUp sobre el jugador.
+        Delegacion del comportamiento.
         """
-        # ✨ Delegación a la estrategia
         self._strategy.apply(player)
-        
-        # Marcar como recolectado
         self.collected = True
 
-"""
-STRATEGY PATTERN - Estrategias para diferentes tipos de PowerUps
-Cada estrategia encapsula el comportamiento de un tipo de PowerUp específico
-"""
 
 class PowerUpStrategy(ABC):
     """
-    Interfaz Strategy - Define el contrato para todas las estrategias de PowerUp
+    Interfaz del Patron Strategy.
+    Define el contrato que deben cumplir todas las estrategias de PowerUps.
     """
     
     @abstractmethod
     def apply(self, player):
         """
-        Aplica el efecto del PowerUp al jugador
+        Metodo abstracto para aplicar el efecto del powerup.
         
         Args:
-            player: Instancia del jugador que recibe el efecto
+            player: Instancia del jugador que recibe el efecto.
         """
         pass
     
     @abstractmethod
     def get_type_name(self) -> str:
-        """Retorna el nombre del tipo de PowerUp para eventos"""
+        """Retorna el identificador del tipo de estrategia."""
         pass
 
 
 class SpeedBoostStrategy(PowerUpStrategy):
     """
-    Estrategia para PowerUp de velocidad
-    Aumenta la velocidad de movimiento del jugador
+    Estrategia Concreta: Aumento de Velocidad.
+    Implementa el comportamiento para otorgar mayor velocidad al jugador.
     """
     
     def __init__(self, speed_increase: int = 3):
-        """
-        Args:
-            speed_increase: Cantidad de velocidad a aumentar (default: 3)
-        """
         self.speed_increase = speed_increase
     
     def apply(self, player):
-        """Aumenta la velocidad del jugador"""
         player.increase_speed(self.speed_increase)
     
     def get_type_name(self) -> str:
@@ -531,19 +477,14 @@ class SpeedBoostStrategy(PowerUpStrategy):
 
 class JumpBoostStrategy(PowerUpStrategy):
     """
-    Estrategia para PowerUp de salto
-    Aumenta la potencia de salto del jugador
+    Estrategia Concreta: Aumento de Salto.
+    Implementa el comportamiento para otorgar mayor potencia de salto.
     """
     
     def __init__(self, jump_increase: int = 2):
-        """
-        Args:
-            jump_increase: Cantidad de potencia de salto a aumentar (default: 2)
-        """
         self.jump_increase = jump_increase
     
     def apply(self, player):
-        """Aumenta la potencia de salto del jugador"""
         player.increase_jump_power(self.jump_increase)
     
     def get_type_name(self) -> str:
@@ -552,12 +493,11 @@ class JumpBoostStrategy(PowerUpStrategy):
 
 class LifeBoostStrategy(PowerUpStrategy):
     """
-    Estrategia para PowerUp de vida extra
-    Otorga una vida adicional al jugador
+    Estrategia Concreta: Vida Extra.
+    Implementa el comportamiento para otorgar una vida adicional.
     """
     
     def apply(self, player):
-        """Otorga una vida extra al jugador"""
         player.get_life()
     
     def get_type_name(self) -> str:
@@ -566,11 +506,10 @@ class LifeBoostStrategy(PowerUpStrategy):
 
 class PowerUpStrategyFactory:
     """
-    Factory para crear estrategias de PowerUp
-    Centraliza la lógica de creación y permite configuración
+    Factoria para crear instancias de estrategias.
+    Desacopla la creacion de la estrategia de su uso.
     """
     
-    # Registro de estrategias disponibles
     _strategies = {
         'speed': SpeedBoostStrategy,
         'jump': JumpBoostStrategy,
@@ -580,18 +519,11 @@ class PowerUpStrategyFactory:
     @classmethod
     def create_strategy(cls, powerup_type: str, **kwargs) -> PowerUpStrategy:
         """
-        Crea una estrategia basada en el tipo de PowerUp
+        Instancia la estrategia correspondiente al tipo solicitado.
         
         Args:
-            powerup_type: Tipo de PowerUp ('speed', 'jump', 'life')
-            **kwargs: Parámetros opcionales para la estrategia
-                     (ej: speed_increase=5, jump_increase=3)
-        
-        Returns:
-            Instancia de la estrategia correspondiente
-        
-        Raises:
-            ValueError: Si el tipo de PowerUp no está registrado
+            powerup_type: Identificador del tipo ('speed', 'jump', 'life').
+            **kwargs: Parametros opcionales para configurar la estrategia.
         """
         if powerup_type not in cls._strategies:
             raise ValueError(
@@ -604,16 +536,10 @@ class PowerUpStrategyFactory:
     
     @classmethod
     def register_strategy(cls, powerup_type: str, strategy_class):
-        """
-        Registra una nueva estrategia (para extensibilidad futura) 
-        Args:
-            powerup_type: Identificador del tipo de PowerUp
-            strategy_class: Clase de estrategia que implementa PowerUpStrategy
-        """
+        """Permite registrar nuevas estrategias dinamicamente."""
         cls._strategies[powerup_type] = strategy_class
-        print(f"✅ Estrategia '{powerup_type}' registrada")
+        print(f"Estrategia '{powerup_type}' registrada")
     
     @classmethod
     def get_available_types(cls) -> list:
-        """Retorna lista de tipos de PowerUp disponibles"""
         return list(cls._strategies.keys())

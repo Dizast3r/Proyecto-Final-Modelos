@@ -1,48 +1,71 @@
 """
-COMMAND PATTERN - Para el movimiento del personaje
-Define una interfaz común para todos los comandos de movimiento
+Patron de Diseno Command:
+Encapsula una solicitud (accion del jugador) como un objeto, permitiendo
+parametrizar a los clientes con diferentes solicitudes, encolar o registrar
+solicitudes y soportar operaciones que pueden deshacerse.
 """
 
 from abc import ABC, abstractmethod
 
 class Command(ABC):
-    """Interfaz base para todos los comandos"""
+    """
+    Interfaz Command:
+    Declara el metodo para ejecutar una operacion.
+    Todas las acciones concretas del jugador deben implementar esta interfaz.
+    """
     
     @abstractmethod
     def execute(self, player):
+        """Metodo abstracto que ejecuta la accion sobre el receptor (player)."""
         pass
 
 
 class MoveLeftCommand(Command):
-    """Comando para mover el personaje a la izquierda"""
+    """
+    Comando Concreto:
+    Implementa la accion de mover hacia la izquierda delegando en el receptor.
+    """
     
     def execute(self, player):
         player.move_left()
 
 
 class MoveRightCommand(Command):
-    """Comando para mover el personaje a la derecha"""
+    """
+    Comando Concreto:
+    Implementa la accion de mover hacia la derecha delegando en el receptor.
+    """
     
     def execute(self, player):
         player.move_right()
 
 
 class JumpCommand(Command):
-    """Comando para hacer saltar al personaje"""
+    """
+    Comando Concreto:
+    Implementa la accion de saltar delegando en el receptor.
+    """
     
     def execute(self, player):
         player.jump()
 
 
 class StopCommand(Command):
-    """Comando para detener el movimiento horizontal"""
+    """
+    Comando Concreto:
+    Implementa la accion de detener el movimiento horizontal.
+    """
     
     def execute(self, player):
         player.stop()
 
 
 class InputHandler:
-    """Maneja la entrada del usuario y ejecuta comandos"""
+    """
+    Invoker / Cliente:
+    Mapea las entradas del usuario (teclas) a comandos especificos y solicita
+    su ejecucion. Desacopla la logica de entrada de la logica de negocio.
+    """
     
     def __init__(self):
         self.move_left = MoveLeftCommand()
@@ -51,7 +74,10 @@ class InputHandler:
         self.stop = StopCommand()
     
     def handle_input(self, keys, player):
-        """Procesa las teclas presionadas y ejecuta comandos"""
+        """
+        Determina que comando ejecutar en funcion de las teclas presionadas
+        y ejecuta el comando correspondiente pasando el receptor (player).
+        """
         import pygame
         
         if keys[pygame.K_LEFT] or keys[pygame.K_a]:

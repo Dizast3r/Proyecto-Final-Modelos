@@ -1,15 +1,20 @@
 # -*- coding: utf-8 -*-
 """
-TEMPLATE METHOD PATTERN - Para generar diferentes tipos de mundos
-REFACTORIZADO: Aplicando principios SOLID y eliminando duplicación
+Patron de Diseno Template Method:
+Define el esqueleto del algoritmo de generacion de mundos en la clase base
+WorldGenerator, delegando la definicion de la configuracion especifica a las
+subclases (Grass, Desert, Ice).
+Estructura del algoritmo:
+1. Generar checkpoints (comun)
+2. Generar plataformas (basado en config)
+3. Generar peligros/spikes (basado en config)
+4. Generar meta (comun)
+5. Generar enemigos (basado en plataformas)
+6. Generar powerups (basado en probabilidades)
 
-Mejoras implementadas:
-- Eliminación de duplicación de código (DRY)
-- Separación de responsabilidades (SRP)
-- Clases auxiliares para validaciones
-- Configuración por mundo usando dataclasses
-- Métodos más cortos y legibles
-- Constantes con nombres descriptivos
+Patron de Diseno Registry:
+Se utiliza en PowerUpTypeRegistry para gestionar los tipos de powerups validos
+disponibles en el sistema, permitiendo validacion y extensibilidad.
 """
 
 from abc import ABC, abstractmethod
@@ -23,7 +28,7 @@ import random
 # ============================================================================
 
 class WorldConstants:
-    """Constantes compartidas para generación de mundos"""
+    """Constantes compartidas para la generacion de mundos."""
     # Checkpoints
     SPACE_BETWEEN_CHECKPOINTS = 800
     NUMBER_OF_CHECKPOINTS_PER_LEVEL = 3
@@ -233,8 +238,10 @@ class CollisionValidator:
 
 class PowerUpTypeRegistry:
     """
-    Registry simple de tipos de PowerUp disponibles.
-    NO es Singleton - cada generador puede tener su propio registry si lo necesita.
+    Patron Registry:
+    Mantiene un registro de los tipos de PowerUp validos en el sistema.
+    Permite consultar y verificar la existencia de tipos de powerups
+    para evitar errores en tiempo de ejecucion durante la generacion.
     """
     
     def __init__(self):
@@ -301,7 +308,13 @@ class PowerUpSelector:
 # ============================================================================
 
 class WorldGenerator(ABC):
-    """Clase abstracta que define el template method para generar mundos"""
+    """
+    Clase Abstracta (Template Method Base):
+    Define el metodo plantilla 'generate_world' que orquesta el proceso
+    completo de creacion del nivel. Las subclases solo deben implementar
+    'get_world_config' para personalizar los parametros de generacion,
+    sin alterar el algoritmo principal.
+    """
     
     def __init__(self):
         # Validadores compartidos
@@ -321,8 +334,19 @@ class WorldGenerator(ABC):
     
     def generate_world(self, width: int, height: int) -> Dict:
         """
-        TEMPLATE METHOD - Define el esqueleto del algoritmo
-        Este método NO debe ser override en subclases
+        Metodo Plantilla (Template Method):
+        Define la secuencia inmutable de pasos para generar un nivel.
+
+        Estructura del Algoritmo:
+        1. Obtener configuracion (Metodo Hook/Abstracto)
+        2. Inicializar estructuras
+        3. Generar Checkpoints
+        4. Generar Plataformas (usando config)
+        5. Generar Peligros (usando config)
+        6. Generar Meta
+        7. Generar Enemigos
+        8. Generar PowerUps (usando config y Registry)
+        9. Configurar Musica
         """
         # Obtener configuración del mundo específico
         config = self.get_world_config()
@@ -340,7 +364,7 @@ class WorldGenerator(ABC):
             'music': None
         }
         
-        # 1. Generar checkpoints (común a todos)
+        # 1. Generar checkpoints
         world_data['checkpoints'] = self._generate_checkpoints(width, height)
         
         # Inicializar validadores con checkpoints
@@ -977,14 +1001,18 @@ class WorldGenerator(ABC):
 
 
 # ============================================================================
-# GENERADORES CONCRETOS - CONFIGURACIÓN POR MUNDO
+# GENERADORES CONCRETOS (Template Method Implementations)
 # ============================================================================
 
 class GrassWorldGenerator(WorldGenerator):
-    """Generador de mundo de pasto (nivel fácil)"""
+    """
+    Implementacion Concreta del Template Method (Mundo de Pasto).
+    Define la configuracion especifica (Colores, Dificultad, Probabilidades)
+    para el nivel facil, utilizada por el algoritmo generico de la clase base.
+    """
     
     def get_world_config(self) -> WorldConfig:
-        """Configuración del mundo de pasto - Nivel fácil"""
+        """Retorna la configuracion de dificultad y estetica para el Nivel 1."""
         return WorldConfig(
             name="Mundo de Pasto",
             colors={
@@ -1032,10 +1060,14 @@ class GrassWorldGenerator(WorldGenerator):
 
 
 class DesertWorldGenerator(WorldGenerator):
-    """Generador de mundo desértico (nivel medio)"""
+    """
+    Implementacion Concreta del Template Method (Mundo Desertico).
+    Aumenta la dificultad reduciendo el tamano de plataformas y aumentando
+    la cantidad de trampas respecto al nivel anterior.
+    """
     
     def get_world_config(self) -> WorldConfig:
-        """Configuración del mundo desértico - Nivel medio"""
+        """Retorna la configuracion de dificultad y estetica para el Nivel 2."""
         return WorldConfig(
             name="Mundo Desértico",
             colors={
@@ -1083,10 +1115,14 @@ class DesertWorldGenerator(WorldGenerator):
 
 
 class IceWorldGenerator(WorldGenerator):
-    """Generador de mundo de hielo (nivel difícil)"""
+    """
+    Implementacion Concreta del Template Method (Mundo de Hielo).
+    Nivel de maxima dificultad con plataformas pequenas, espaciadas y
+    alta densidad de trampas y enemigos.
+    """
     
     def get_world_config(self) -> WorldConfig:
-        """Configuración del mundo de hielo - Nivel difícil"""
+        """Retorna la configuracion de dificultad y estetica para el Nivel 3."""
         return WorldConfig(
             name="Mundo de Hielo",
             colors={
@@ -1101,7 +1137,7 @@ class IceWorldGenerator(WorldGenerator):
                     {'x': 450, 'y': 320, 'width': 80, 'height': 15}
                 ],
                 num_segments=8,
-                platforms_per_segment=(1, 2),  # Solo 1 por segmento
+                platforms_per_segment=(1, 2),
                 height_range=(140, 350),
                 width_range=(65, 95),
                 platform_height=15,

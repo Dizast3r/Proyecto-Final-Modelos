@@ -1,6 +1,9 @@
 """
-Entidades del juego: Player, Platform, Spike, Checkpoint, Goal
-Esta Separado Enemigo y Powerup, para distinguirlos con su patron Flyweight
+Entidades del juego.
+Define las clases core para los objetos interactivos del juego (Jugador,
+Plataformas, Trampas, etc).
+Implementacion de patrones:
+- Memento: La clase Player actua como Originator, capaz de guardar y restaurar su estado.
 """
 
 import pygame
@@ -9,7 +12,11 @@ from memento import PlayerMemento
 
 
 class Player:
-    """Clase del jugador que puede guardar y restaurar su estado"""
+    """
+    Clase Player (Originator):
+    Representa al personaje principal. Implementa metodos para crear y restaurar
+    Mementos, permitiendo el sistema de checkpoints sin exponer su estructura interna.
+    """
     
     def __init__(self, x, y):
         self.x = x
@@ -38,12 +45,12 @@ class Player:
         # Sprite idle (quieto) - primer sprite
         self.idle_sprite = self.sprites[0] if self.sprites else None
         
-        # Control de animación
+        # Control de animacion
         self.current_sprite = 0
         self.animation_speed = PlayerConfig.ANIMATION_SPEED
         self.animation_counter = 0
 
-        #Player Rect
+        # Player Rect
         self.padding_x = 6
         self.padding_top = 4
         self.rect = pygame.Rect(
@@ -53,13 +60,13 @@ class Player:
             self.height - self.padding_top
         )
         
-        # Dirección (para flip horizontal)
+        # Direccion (para flip horizontal)
         self.facing_right = True
         
         # Imagen actual
         self.image = self.idle_sprite
 
-        #Guardar spawn Inicial
+        # Guardar spawn Inicial
         self._initial_spawn_memento = self.create_memento()
     
     def move_left(self):
@@ -77,17 +84,17 @@ class Player:
         self.velocity_x = 0
     
     def jump(self):
-        """Saltar solo si está en el suelo"""
+        """Saltar solo si esta en el suelo"""
         if self.on_ground:
             self.velocity_y = -self.jump_power
             self.on_ground = False
     
     def update(self, platforms, world_width):
-        """Actualiza la posición del jugador"""
+        """Actualiza la posicion del jugador"""
         # Aplicar gravedad
         self.velocity_y += self.gravity
         
-        # Limitar velocidad de caída
+        # Limitar velocidad de caida
         if self.velocity_y > 20:
             self.velocity_y = 20
         
@@ -108,17 +115,17 @@ class Player:
                                        platform['width'], platform['height'])
             
             if player_rect.colliderect(platform_rect):
-                # Colisión desde arriba (aterrizar)
+                # Colision desde arriba (aterrizar)
                 if self.velocity_y > 0:
                     self.y = platform['y'] - self.height
                     self.velocity_y = 0
                     self.on_ground = True
-                # Colisión desde abajo
+                # Colision desde abajo
                 elif self.velocity_y < 0:
                     self.y = platform['y'] + platform['height']
                     self.velocity_y = 0
 
-        # Actualizar animación
+        # Actualizar animacion
         if self.sprites:
             if self.velocity_x != 0:  # Solo animar cuando se mueve
                 self.animation_counter += self.animation_speed
@@ -131,7 +138,7 @@ class Player:
                 self.current_sprite = 0
                 self.animation_counter = 0
         
-        # Límites de mundo
+        # Limites de mundo
         if self.x < 0:
             self.x = 0
             self.velocity_x = 0
@@ -153,7 +160,7 @@ class Player:
                 img = pygame.transform.flip(self.image, True, False)
             screen.blit(img, (screen_x, self.y))
         else:
-            # Dibujar rectángulo temporal
+            # Dibujar rectangulo temporal
             pygame.draw.rect(screen, (255, 0, 0), 
                            (screen_x, self.y, self.width, self.height))
             # Cara simple
@@ -163,11 +170,15 @@ class Player:
                              (int(screen_x + 25), int(self.y + 20)), 3)
     
     def create_memento(self):
-        """Crea un memento con el estado actual"""
+        """
+        Crea un objeto Memento con el estado actual del jugador.
+        """
         return PlayerMemento(self.x, self.y, PlayerConfig.DEFAULT_SPEED, PlayerConfig.DEFAULT_JUMP_POWER)
     
     def restore_from_memento(self, memento):
-        """Restaura el estado desde un memento"""
+        """
+        Restaura el estado del jugador usando un objeto Memento dado.
+        """
         if memento:
             state = memento.get_state()
             self.x = state['x']
@@ -179,8 +190,8 @@ class Player:
 
     def reset_to_initial_spawn(self):
         """        
-        Este método usa el memento guardado en __init__ para restaurar
-        completamente el jugador a su estado original (sin PowerUps)
+        Este metodo usa el memento guardado en __init__ para restaurar
+        completamente el jugador a su estado original.
         """
         self.restore_from_memento(self._initial_spawn_memento)
     
@@ -246,7 +257,7 @@ class Spike:
         self.color = color
     
     def draw(self, screen, camera_x):
-        """Dibuja la espina como un triángulo"""
+        """Dibuja la espina como un triangulo"""
         screen_x = self.x - camera_x
         
         points = [
@@ -259,7 +270,7 @@ class Spike:
         pygame.draw.polygon(screen, (0, 0, 0), points, 2)
     
     def get_rect(self):
-        """Retorna el rectángulo de colisión (solo parte superior del triángulo)"""
+        """Retorna el rectangulo de colision (solo parte superior del triangulo)"""
         hit_height = int(self.height * 0.6)
         hit_y = self.y
         return pygame.Rect(self.x, hit_y, self.width, hit_height)
@@ -282,7 +293,7 @@ class Checkpoint:
         screen_x = self.x - camera_x
         
         if self.activated:
-            color = (0, 255, 0)  # Verde cuando está activado
+            color = (0, 255, 0)  # Verde cuando esta activado
         else:
             color = self.color
         
@@ -296,7 +307,7 @@ class Checkpoint:
         ])
     
     def get_rect(self):
-        """Retorna el rectángulo de colisión"""
+        """Retorna el rectangulo de colision"""
         return pygame.Rect(self.x, self.y, self.width, self.height)
     
     def activate(self):
@@ -323,7 +334,7 @@ class Goal:
         """Dibuja la meta: base cuadrada + palo blanco + bola negra"""
         screen_x = self.x - camera_x
         
-        # Color cambia si ya se alcanzó
+        # Color cambia si ya se alcanzo
         if self.reached:
             base_color = (50, 255, 50)
             pole_color = (200, 255, 200)
@@ -366,7 +377,7 @@ class Goal:
                           (ball_center_x - 3, ball_center_y - 3), 3)
     
     def get_rect(self):
-        """Retorna el rectángulo de colisión"""
+        """Retorna el rectangulo de colision"""
         return pygame.Rect(self.x, self.y, self.width, self.height)
     
     def activate(self):

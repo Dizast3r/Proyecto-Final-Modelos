@@ -1,5 +1,8 @@
 """
-Cargador de mundos - Separa la lógica de carga de mundos
+Cargador de Mundos (World Loader).
+Responsable de interpretar los datos crudos generados por los algoritmos (DTOs)
+y convertirlos en instancias de entidades de juego utilizables.
+Actua como una Factoria o Builder que ensambla el nivel final.
 """
 
 from entities import Platform, Spike, Checkpoint, Goal
@@ -7,7 +10,10 @@ from Powerups_Enemies import EnemyContext, PowerUpContext
 
 
 class WorldLoader:
-    """Carga y convierte datos de mundo en entidades del juego"""
+    """
+    Clase encargada de la instanciacion de objetos del nivel.
+    Convierte diccionarios de configuracion en objetos PyGame/Entidades.
+    """
     
     def __init__(self):
         self.platforms = []
@@ -18,9 +24,15 @@ class WorldLoader:
         self.goal = None
         self.colors = {}
         self.world_name = ""
+        self.music_file = None
     
     def load_world(self, world_data):
-        """Carga un mundo generado"""
+        """
+        Procesa el diccionario de datos del mundo y puebla las listas de entidades.
+        
+        Args:
+            world_data (dict): Diccionario con la configuracion del nivel generada.
+        """
         self.colors = world_data['colors']
         self.world_name = world_data['name']
         self.music_file = world_data['music']
@@ -43,15 +55,10 @@ class WorldLoader:
         # Crear PowerUps (Flyweight)
         self.powerups = self._create_powerups(world_data.get('powerups', []))
         
-        print(f"\n🌍 Mundo cargado: {self.world_name}")
-        print(f"   ✅ {len(self.platforms)} plataformas")
-        print(f"   ✅ {len(self.spikes)} espinas")
-        print(f"   ✅ {len(self.checkpoints)} checkpoints")
-        print(f"   ✅ {len(self.enemies)} enemigos")
-        print(f"   ✅ {len(self.powerups)} PowerUps")
+        print(f"Mundo cargado: {self.world_name}")
     
     def _create_platforms(self, platform_data):
-        """Crea las plataformas del mundo"""
+        """Instancia objetos Platform desde datos crudos."""
         platforms = []
         for p in platform_data:
             platform = Platform(
@@ -62,7 +69,7 @@ class WorldLoader:
         return platforms
     
     def _create_spikes(self, spike_data):
-        """Crea las espinas del mundo"""
+        """Instancia objetos Spike desde datos crudos."""
         spikes = []
         for s in spike_data:
             spike = Spike(
@@ -73,7 +80,7 @@ class WorldLoader:
         return spikes
     
     def _create_checkpoints(self, checkpoint_data):
-        """Crea los checkpoints del mundo"""
+        """Instancia objetos Checkpoint desde datos crudos."""
         checkpoints = []
         for i, c in enumerate(checkpoint_data):
             checkpoint = Checkpoint(c['x'], c['y'], i)
@@ -81,13 +88,16 @@ class WorldLoader:
         return checkpoints
     
     def _create_goal(self, goal_data):
-        """Crea la meta del mundo"""
+        """Instancia el objeto Goal si existe en los datos."""
         if goal_data:
             return Goal(goal_data['x'], goal_data['y'])
         return None
     
     def _create_enemies(self, enemy_data):
-        """Crea los enemigos usando Flyweight"""
+        """
+        Instancia contextos de enemigos.
+        Utiliza el patron Flyweight implicitamente al usar EnemyContext.
+        """
         enemies = []
         for e in enemy_data:
             enemy = EnemyContext(
@@ -99,7 +109,10 @@ class WorldLoader:
         return enemies
     
     def _create_powerups(self, powerup_data):
-        """Crea los PowerUps usando Flyweight"""
+        """
+        Instancia contextos de PowerUps.
+        Utiliza el patron Flyweight implicitamente al usar PowerUpContext.
+        """
         powerups = []
         for p in powerup_data:
             powerup_type = p.get('type', 'speed')
@@ -113,7 +126,7 @@ class WorldLoader:
         return powerups
     
     def get_platform_data(self):
-        """Retorna datos de plataformas para física"""
+        """Retorna una lista simplificada de plataformas para calculos de fisica."""
         return [
             {
                 'x': p.x,

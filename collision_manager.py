@@ -1,19 +1,26 @@
 """
-Gestor de colisiones - Separa la lógica de detección de colisiones
+Gestor de colisiones/fisica.
+Centraliza la logica de deteccion y resolucion de colisiones entre entidades.
+Actua como mediador interactuando con:
+- EventManager (Observer): Para notificar eventos (muerte, items, meta).
+- CheckpointManager (Memento): Para gestionar la recuperacion de estado al morir.
 """
 
 from game_events import GameEvent, GameEventType
 
 
 class CollisionManager:
-    """Maneja todas las colisiones del juego"""
+    """
+    Clase que gestiona todas las colisiones del juego.
+    Separa la logica de fisica de las entidades individuales.
+    """
     
     def __init__(self, event_manager, checkpoint_manager):
         self.event_manager = event_manager
         self.checkpoint_manager = checkpoint_manager
     
     def check_all_collisions(self, player, checkpoints, goal, enemies, powerups, spikes, world_name):
-        """Verifica todas las colisiones del juego"""
+        """Metodo fachada para verificar todos los tipos de colisiones en un frame."""
         player_rect = player.get_rect()
         
         # 1. Colisiones con checkpoints
@@ -32,7 +39,7 @@ class CollisionManager:
         self._check_spike_collisions(player_rect, player, spikes)
     
     def _check_checkpoint_collisions(self, player_rect, checkpoints):
-        """Verifica colisiones con checkpoints"""
+        """Detecta y activa nuevos checkpoints."""
         for checkpoint in checkpoints:
             if player_rect.colliderect(checkpoint.get_rect()):
                 if not checkpoint.activated:
@@ -45,7 +52,7 @@ class CollisionManager:
                     self.event_manager.notify(event)
     
     def _check_goal_collision(self, player_rect, goal, world_name):
-        """Verifica colisión con la meta"""
+        """Detecta si el jugador ha llegado a la meta."""
         if goal and not goal.reached:
             if player_rect.colliderect(goal.get_rect()):
                 goal.activate()
@@ -57,7 +64,7 @@ class CollisionManager:
                 self.event_manager.notify(event)
     
     def _check_powerup_collisions(self, player_rect, player, powerups):
-        """Verifica colisiones con PowerUps"""
+        """Aplica efectos de PowerUps al colisionar."""
         for powerup in powerups:
             if powerup.collected:
                 continue
@@ -72,7 +79,11 @@ class CollisionManager:
                 self.event_manager.notify(event)
     
     def _check_enemy_collisions(self, player_rect, player, enemies):
-        """Verifica colisiones con enemigos"""
+        """
+        Resuelve colisiones con enemigos.
+        - Si el jugador cae sobre el enemigo: Enemigo muere.
+        - Si es colision frontal/lateral: Jugador muere.
+        """
         for enemy in enemies:
             if not enemy.alive:
                 continue
@@ -80,7 +91,7 @@ class CollisionManager:
             enemy_rect = enemy.get_rect()
             
             if player_rect.colliderect(enemy_rect):
-                # Determinar tipo de colisión
+                # Determinar tipo de colision
                 player_bottom = player.y + player.height
                 enemy_top = enemy_rect.y
                 
@@ -92,17 +103,20 @@ class CollisionManager:
                     event = GameEvent(GameEventType.ENEMY_KILLED, {})
                     self.event_manager.notify(event)
                 else:
-                    # Colisión frontal - el enemigo mata al jugador
+                    # Colision frontal - el enemigo mata al jugador
                     self._handle_player_death(player)
     
     def _check_spike_collisions(self, player_rect, player, spikes):
-        """Verifica colisiones con espinas"""
+        """Mata al jugador si toca espinas."""
         for spike in spikes:
             if player_rect.colliderect(spike.get_rect()):
                 self._handle_player_death(player)
     
     def _handle_player_death(self, player):
-        """Maneja la muerte del jugador"""
+        """
+        Coordina la logica de respawn usando Memento.
+        Si hay vidas, restaura al ultimo checkpoint. Si no, reinicia o game over.
+        """
         still_alive = player.die()
         
         # Notificar evento de muerte
@@ -113,17 +127,17 @@ class CollisionManager:
         self.event_manager.notify(event)
         
         if still_alive:
-            # Intentar restaurar desde checkpoint
+            # Intentar restaurar desde checkpoint (Memento Pattern)
             memento = self.checkpoint_manager.get_last_checkpoint()
             
             if memento:
-                #Hay checkpoint: restaurar desde ahí (con PowerUps)
+                # Hay checkpoint: restaurar estado
                 player.restore_from_memento(memento)
-                print("🔄 Restaurado desde último checkpoint")
+                print("Restaurado desde ultimo checkpoint")
             else:
-                #NO hay checkpoint: resetear al spawn inicial (sin PowerUps)
+                # NO hay checkpoint: resetear al spawn inicial
                 player.reset_to_initial_spawn()
-                print("🔄 Sin checkpoints, spawn inicial")
+                print("Sin checkpoints, reiniciando al inicio")
             
             # Notificar evento de respawn
             event = GameEvent(GameEventType.PLAYER_RESPAWNED, {})

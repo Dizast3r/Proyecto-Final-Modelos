@@ -1,6 +1,8 @@
 """
-OBSERVER PATTERN - Sistema de eventos del juego
-✅ MODIFICADO: GameOverChecker ahora cambia estado en vez de cerrar
+Patron de Diseno Observer:
+Implementa un sistema de eventos y suscriptores para desacoplar la logica del juego.
+GameEventManager actua como el Sujeto (Subject) y notifica a los Observadores
+(GameEventObserver) cuando ocurren eventos importantes.
 """
 
 from abc import ABC, abstractmethod
@@ -10,7 +12,7 @@ from menu_system import GameState
 
 
 class GameEventType(Enum):
-    """Tipos de eventos en el juego"""
+    """Enumeracion de los tipos de eventos posibles en el juego."""
     CHECKPOINT_ACTIVATED = "checkpoint_activated"
     GOAL_REACHED = "goal_reached"
     PLAYER_DIED = "player_died"
@@ -21,7 +23,7 @@ class GameEventType(Enum):
 
 
 class GameEvent:
-    """Evento con datos asociados"""
+    """Clase que encapsula la informacion de un evento."""
     
     def __init__(self, event_type: GameEventType, data: Dict[str, Any] = None):
         self.event_type = event_type
@@ -32,42 +34,47 @@ class GameEvent:
 
 
 class GameEventObserver(ABC):
-    """Interfaz Observer - Los observadores deben implementar este método"""
+    """
+    Interfaz Observer:
+    Define el metodo update (on_game_event) que deben implementar todos
+    los objetos que deseen escuchar eventos del juego.
+    """
     
     @abstractmethod
     def on_game_event(self, event: GameEvent):
-        """Método llamado cuando ocurre un evento"""
+        """Metodo invocado cuando el Sujeto notifica un nuevo evento."""
         pass
 
 
 class GameEventManager:
     """
-    Subject - Gestor central de eventos (Singleton-like)
-    Mantiene lista de observadores y notifica cuando ocurren eventos
+    Sujeto (Subject):
+    Gestiona la lista de suscriptores (observadores) y se encarga de
+    notificarles cuando ocurre un evento.
     """
     
     def __init__(self):
         self._observers: List[GameEventObserver] = []
     
     def subscribe(self, observer: GameEventObserver):
-        """Registra un observador para recibir notificaciones"""
+        """Añade un nuevo observador a la lista de notificaciones."""
         if observer not in self._observers:
             self._observers.append(observer)
-            print(f"✅ Observador registrado: {observer.__class__.__name__}")
+            print(f"Observador registrado: {observer.__class__.__name__}")
     
     def unsubscribe(self, observer: GameEventObserver):
-        """Elimina un observador"""
+        """Elimina un observador de la lista."""
         if observer in self._observers:
             self._observers.remove(observer)
-            print(f"❌ Observador eliminado: {observer.__class__.__name__}")
+            print(f"Observador eliminado: {observer.__class__.__name__}")
     
     def notify(self, event: GameEvent):
-        """Notifica a todos los observadores sobre un evento"""
+        """Dispara la notificacion del evento a todos los suscriptores."""
         for observer in self._observers:
             observer.on_game_event(event)
     
     def clear_observers(self):
-        """Limpia todos los observadores"""
+        """Elimina todos los observadores registrados."""
         self._observers.clear()
 
 
@@ -76,105 +83,102 @@ class GameEventManager:
 # ============================================================================
 
 class ConsoleLogger(GameEventObserver):
-    """Observador que imprime eventos en consola"""
+    """
+    Observador Concreto - Logger:
+    Su responsabilidad es registrar (imprimir) informacion sobre los eventos
+    que ocurren en el sistema.
+    """
     
     def on_game_event(self, event: GameEvent):
-        """Registra eventos en consola"""
         messages = {
             GameEventType.CHECKPOINT_ACTIVATED: 
-                lambda e: f"✓ Checkpoint {e.data.get('checkpoint_id')} guardado!",
+                lambda e: f"[CHECKPOINT] Checkpoint {e.data.get('checkpoint_id')} guardado",
             
             GameEventType.GOAL_REACHED: 
-                lambda e: f"🎉 ¡META ALCANZADA! Completaste {e.data.get('world_name', 'el nivel')}",
+                lambda e: f"[META] Completaste {e.data.get('world_name', 'el nivel')}",
             
             GameEventType.PLAYER_DIED: 
-                lambda e: f"💀 Jugador murió. Vidas restantes: {e.data.get('lives_remaining', 0)}",
+                lambda e: f"[MUERTE] Jugador murio. Vidas restantes: {e.data.get('lives_remaining', 0)}",
             
             GameEventType.PLAYER_RESPAWNED: 
-                lambda e: f"🔄 Jugador reaparece",
+                lambda e: f"[RESPAWN] Jugador reaparece",
             
             GameEventType.ENEMY_KILLED: 
-                lambda e: f"💥 ¡Enemigo aplastado!",
+                lambda e: f"[COMBATE] Enemigo eliminado",
             
             GameEventType.POWERUP_COLLECTED: 
                 lambda e: self._format_powerup_message(e.data.get('type')),
             
             GameEventType.WORLD_LOADED: 
-                lambda e: f"🌍 Mundo cargado: {e.data.get('world_name')}"
+                lambda e: f"[MUNDO] Mundo cargado: {e.data.get('world_name')}"
         }
         
         if event.event_type in messages:
             print(messages[event.event_type](event))
     
     def _format_powerup_message(self, powerup_type: str) -> str:
-        """Formatea mensajes de PowerUps"""
         messages = {
-            'speed': "⚡ Speed boost!",
-            'jump': "🦘 Jump boost!",
-            'life': "❤️ Extra life!"
+            'speed': "[POWERUP] Speed boost!",
+            'jump': "[POWERUP] Jump boost!",
+            'life': "[POWERUP] Extra life!"
         }
-        return messages.get(powerup_type, "✨ PowerUp recolectado!")
+        return messages.get(powerup_type, "[POWERUP] Recolectado!")
 
 
 class GameOverChecker(GameEventObserver):
     """
-    Observador que verifica condición de Game Over
-    
-    ✅ MODIFICADO: Ahora cambia el estado del menú en vez de cerrar el juego
+    Observador Concreto - Gestor de Game Over:
+    Monitorea los eventos de muerte del jugador para determinar cuando
+    se acaba el juego y cambiar el estado global.
     """
     
     def __init__(self, game):
         self.game = game
     
     def on_game_event(self, event: GameEvent):
-        """Verifica si el juego debe mostrar Game Over"""
         if event.event_type == GameEventType.PLAYER_DIED:
             lives = event.data.get('lives_remaining', 0)
             if lives <= 0:
-                print("\n" + "="*50)
-                print("GAME OVER!")
-                print("="*50)
-                #Cambiar estado a GAME_OVER en vez de cerrar
+                print("\nGAME OVER\n")
                 self.game.menu_manager.current_state = GameState.GAME_OVER
 
 
 class LevelCompleteChecker(GameEventObserver):
     """
-    ✨ NUEVO: Observador que detecta cuando se completa un nivel
+    Observador Concreto - Completitud de Nivel:
+    Verifica si se ha alcanzado la meta para transicionar al siguiente nivel
+    o finalizar el juego.
     """
     
     def __init__(self, game):
         self.game = game
     
     def on_game_event(self, event: GameEvent):
-        """Detecta cuando se alcanza la meta"""
         if event.event_type == GameEventType.GOAL_REACHED:
             
-            
-            # Determinar si es el último mundo
+            # Determinar si es el ultimo mundo
             if self.game.current_world_index >= len(self.game.world_sequence) - 1:
-                #Último mundo completado
                 self.game.menu_manager.current_state = GameState.GAME_COMPLETE
-                print("🏆 ¡JUEGO COMPLETADO!")
+                print("JUEGO COMPLETADO")
             else:
-                #Nivel completado, hay más mundos
                 self.game.menu_manager.current_state = GameState.LEVEL_COMPLETE
-                print("✅ Nivel completado, siguiente mundo disponible")
+                print("Nivel completado, siguiente mundo disponible")
 
 
 class CheckpointSaver(GameEventObserver):
-    """Observador que guarda checkpoints automáticamente"""
+    """
+    Observador Concreto - Guardado Automatico:
+    Se encarga de activar el guardado del Memento cuando se alcanza un checkpoint.
+    """
     
     def __init__(self, checkpoint_manager):
         self.checkpoint_manager = checkpoint_manager
-        self.game = None  # Se asigna después
+        self.game = None
     
     def set_game(self, game):
-        """Asigna la referencia al juego para acceder al player actual"""
         self.game = game
     
     def on_game_event(self, event: GameEvent):
-        """Guarda checkpoint cuando se activa"""
         if event.event_type == GameEventType.CHECKPOINT_ACTIVATED:
             if self.game is None:
                 return

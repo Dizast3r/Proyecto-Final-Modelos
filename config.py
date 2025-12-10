@@ -1,8 +1,10 @@
 """
-Configuración y constantes del juego
+Modulo de Configuracion.
+Centraliza todas las constantes y parametros de ajuste del juego (Fisicas,
+Rutas de Assets, Configuracion de Pantalla, etc).
 """
 
-# Configuración del jugador
+# Configuracion del jugador
 class PlayerConfig:
     DEFAULT_SPEED = 5
     DEFAULT_JUMP_POWER = 18
@@ -21,7 +23,7 @@ class PlayerConfig:
     ANIMATION_SPEED = 0.30
 
 
-# Configuración de enemigos
+# Configuracion de enemigos
 class EnemyConfig:
     WIDTH = 40
     HEIGHT = 50
@@ -33,7 +35,7 @@ class EnemyConfig:
     ANIMATION_SPEED = 10
 
 
-# Configuración de PowerUps
+# Configuracion de PowerUps
 class PowerUpConfig:
     WIDTH = 40
     HEIGHT = 50
@@ -44,7 +46,7 @@ class PowerUpConfig:
     SPRITE_LIFE_NAME = 'SpriteLife'
 
 
-# Configuración del juego
+# Configuracion del juego
 class GameConfig:
     DEFAULT_WIDTH = 1600
     DEFAULT_HEIGHT = 600

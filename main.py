@@ -1,68 +1,56 @@
 """
-MAIN - Programa principal CON REGENERACIÓN DE MUNDOS
-✅ NUEVO: Usa generadores reutilizables en vez de mundos pre-generados
-
-Ejecuta este archivo para jugar
+MAIN - Punto de entrada del juego.
+Inicializa el juego, configura los generadores de niveles y comienza la ejecucion.
+Integracion de patrones:
+- Template Method: En la generacion de mundos.
+- Command: En el manejo de inputs.
+- Observer: En el sistema de eventos.
 """
 
 import pygame
 from game import Game
 from world_generator import GrassWorldGenerator, DesertWorldGenerator, IceWorldGenerator
 
+# Dimensiones constantes del juego
 ANCHO_DEL_MUNDO = 3000
 ANCHO_VENTANA = 1600
 ALTO_VENTANA = 600
 
 
 def main():
-    # Crear el juego
+    """Funcion principal que orquesta el inicio del juego."""
+    # Instanciar clase principal del juego
     game = Game(ANCHO_VENTANA, ALTO_VENTANA, ANCHO_DEL_MUNDO)
     
-    # ✅ Crear generadores (reutilizables)
-    print("\n🔧 Configurando generadores de mundos...")
+    # Crear e inyectar generadores de mundos (Template Method Pattern)
+    print("\nInicializando generadores...")
     generators = [
         GrassWorldGenerator(),
         DesertWorldGenerator(),
         IceWorldGenerator()
     ]
     
-    # ✅ Pasar generadores al juego
+    # Inyeccion de dependencias de generacion
     game.set_world_generators(generators)
     
     print("\n" + "=" * 60)
-    print("SUPER KIRBY BRO - PATRONES DE DISEÑO")
+    print("SUPER KIRBY BRO - PATRONES DE DISENO")
     print("=" * 60)
-    print("\n🎮 PATRONES IMPLEMENTADOS:")
+    print("\nPATRONES IMPLEMENTADOS:")
     print("  1. COMMAND PATTERN - Controles del personaje")
     print("  2. MEMENTO PATTERN - Sistema de checkpoints")
-    print("  3. TEMPLATE METHOD PATTERN - Generación de mundos")
-    print("  4. FLYWEIGHT PATTERN - Optimización de sprites")
+    print("  3. TEMPLATE METHOD PATTERN - Generacion de mundos")
+    print("  4. FLYWEIGHT PATTERN - Optimizacion de sprites")
     print("  5. OBSERVER PATTERN - Sistema de eventos")
     print("  6. STRATEGY PATTERN - Comportamiento de PowerUps")
-    print("\n🎨 SISTEMA DE MENÚS:")
-    print("  ✅ Menú principal con botones interactivos")
-    print("  ✅ Menús de completar nivel")
-    print("  ✅ Game Over con reintentar")
-    print("  ✅ Pantalla de victoria")
-    print("  ✅ Regeneración de mundos en cada partida")
-    print("\n🕹️ CONTROLES:")
-    print("  ← → / A D : Mover")
-    print("  Espacio / ↑ / W : Saltar")
-    print("  Mouse : Interactuar con menús")
-    print("  ESC : Salir del menú principal")
-    print("\n⭐ OBJETIVO:")
-    print("  - Completa los 3 mundos en secuencia")
-    print("  - Recoge PowerUps para mejorar tus habilidades")
-    print("  - Evita enemigos y trampas")
-    print("  - ¡Alcanza la meta de cada mundo!")
-    print("\n🔄 NUEVO: Los mundos se regeneran en cada partida")
+    print("  7. STATE PATTERN - Sistema de menus")
     print("=" * 60)
-    print("\n✨ Iniciando juego...\n")
+    print("\nIniciando ejecucion...\n")
     
-    # Ejecutar el juego
+    # Iniciar el bucle del juego
     game.run()
     
-    print("\n¡Gracias por jugar!")
+    print("\nEjecucion finalizada.")
 
 
 if __name__ == "__main__":

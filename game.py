@@ -1,6 +1,8 @@
 """
-Clase Game refactorizada - CON REGENERACIÓN DE MUNDOS
-✅ NUEVO: Los mundos se regeneran en cada "Nuevo Juego"
+Clase Game:
+Controlador principal del juego que orquesta los subsistemas y el bucle principal.
+Integra multiples patrones de diseno como Observer, Command y Memento para
+delegar responsabilidades.
 """
 
 import pygame
@@ -27,12 +29,17 @@ from menu_system import MenuManager, GameState
 
 class Game:
     """
-    Clase principal del juego
-    ✅ MODIFICADO: Ahora guarda los generadores y regenera mundos
+    Clase principal que maneja el ciclo de vida del juego.
+    
+    Patrones integrados:
+    - Observer: A traves de GameEventManager para notificar eventos.
+    - Command: A traves de InputHandler para procesar entradas.
+    - Memento: A traves de CheckpointManager para guardar estado.
+    - State: A traves de MenuManager para gestionar estados del juego.
     """
     
     def __init__(self, width=None, height=None, world_width=None):
-        # Configuración
+        # Configuracion
         self.width = width or GameConfig.DEFAULT_WIDTH
         self.height = height or GameConfig.DEFAULT_HEIGHT
         self.world_width = world_width or GameConfig.DEFAULT_WORLD_WIDTH
@@ -44,14 +51,14 @@ class Game:
         self.clock = pygame.time.Clock()
         self.running = True
 
-        # ✨ Sistema de menús
+        # Sistema de menus (State Pattern para UI)
         self.menu_manager = MenuManager(self.screen)
         self.setup_menu_callbacks()
         
-        # Sistema de eventos (Observer Pattern)
+        # Sistema de eventos (Observer Pattern - Subject)
         self.event_manager = GameEventManager()
         
-        # Sistemas del juego
+        # Inicializacion de subsistemas
         self.input_handler = InputHandler()
         self.checkpoint_manager = CheckpointManager()
         self.player = Player(100, 100)
@@ -63,25 +70,28 @@ class Game:
             self.checkpoint_manager
         )
 
-        # ✅ NUEVO: Guardar generadores en vez de mundos pre-generados
-        self.world_generators = []  # Lista de generadores
-        self.world_sequence = []  # Mundos actuales generados
+        # Configuracion de generacion de mundos
+        self.world_generators = []
+        self.world_sequence = []
         self.current_world_index = -1
         
-        # Registrar observadores
+        # Registro de observadores
         self._setup_observers()
         
-        print("🎮 Juego inicializado con Observer Pattern")
+        print("Sistema iniciado correctamente")
     
     def setup_menu_callbacks(self):
-        """Configura los callbacks de los menús"""
+        """Asigna las funciones de callback para las interacciones del menu."""
         self.menu_manager.on_start_game = self.start_new_game
         self.menu_manager.on_next_level = self.load_next_world
         self.menu_manager.on_restart_game = self.restart_from_beginning
         self.menu_manager.on_quit = self.quit_game
     
     def _setup_observers(self):
-        """Configura los observadores del juego"""
+        """
+        Configura e inicializa los observadores del sistema de eventos.
+        Se suscriben al EventManager para reaccionar a cambios de estado.
+        """
         console_logger = ConsoleLogger()
         self.event_manager.subscribe(console_logger)
         
@@ -96,18 +106,18 @@ class Game:
         self.event_manager.subscribe(self.checkpoint_saver)
     
     def load_world(self, world_data):
-        """Carga un mundo - Delega al WorldLoader"""
+        """
+        Carga los datos de un nivel especifico delegando en WorldLoader.
+        Reinicia el estado del jugador y notifica el evento de carga.
+        """
         self.world_loader.load_world(world_data)
         
-        # Reproducir música del mundo
         if self.world_loader.music_file:
             play_world_music(self.world_loader.music_file)
         
-        # Resetear jugador y sistemas
         self.player = Player(100, 100)
         self.checkpoint_manager.clear_checkpoints()
         
-        # Notificar evento de mundo cargado
         event = GameEvent(
             GameEventType.WORLD_LOADED,
             {'world_name': self.world_loader.world_name}
@@ -115,41 +125,33 @@ class Game:
         self.event_manager.notify(event)
     
     def set_world_generators(self, generators: list):
-        """
-        ✅ Establece los GENERADORES de mundos (no los mundos)
-        
-        Args:
-            generators: Lista de instancias de WorldGenerator
-                       (ej: [GrassWorldGenerator(), DesertWorldGenerator(), ...])
-        """
+        """Configura la lista de generadores de mundos a utilizar."""
         self.world_generators = generators
-        print(f"✅ {len(generators)} generadores configurados")
+        print(f"Generadores configurados: {len(generators)}")
     
     def _regenerate_worlds(self):
         """
-        ✅ NUEVO: Regenera todos los mundos usando los generadores
+        Ejecuta el Template Method de cada generador para crear nuevas
+        instancias de los niveles.
         """
         if not self.world_generators:
-            print("❌ No hay generadores configurados, usando mundos existentes")
+            print("No hay generadores configurados. Usando mundos existentes.")
             return
         
-        print("\n🔨 Regenerando mundos...")
+        print("\nGenerando mundos...")
         self.world_sequence = []
         
         for i, generator in enumerate(self.world_generators):
-            print(f"   Generando mundo {i+1}/{len(self.world_generators)}...")
+            print(f"Procesando generador {i+1}/{len(self.world_generators)}...")
             world_data = generator.generate_world(self.world_width, self.height)
             self.world_sequence.append(world_data)
         
-        print(f"✅ {len(self.world_sequence)} mundos regenerados\n")
+        print("Generacion completada.")
     
     def start_new_game(self):
-        """
-        ✅ MODIFICADO: Regenera mundos antes de iniciar
-        """
-        print("\n🎮 Iniciando nuevo juego...")
+        """Inicia una nueva sesion de juego regenerando los niveles."""
+        print("\nIniciando nuevo juego...")
         
-        # ✅ Regenerar mundos si hay generadores
         if self.world_generators:
             self._regenerate_worlds()
         
@@ -157,56 +159,47 @@ class Game:
         self.load_current_world()
     
     def load_next_world(self):
-        """Carga el siguiente mundo en la secuencia"""
+        """Avanza al siguiente nivel en la secuencia si existe."""
         if self.current_world_index < len(self.world_sequence) - 1:
             self.current_world_index += 1
             self.load_current_world()
-            print(f"➡️ Avanzando a mundo {self.current_world_index + 1}")
         else:
-            print("⚠️ No hay más mundos disponibles")
+            print("No hay mas niveles disponibles.")
     
     def load_current_world(self):
-        """Carga el mundo actual según current_world_index"""
+        """Carga el nivel actual basado en el indice de secuencia."""
         if 0 <= self.current_world_index < len(self.world_sequence):
             world_data = self.world_sequence[self.current_world_index]
             self.load_world(world_data)
         else:
-            print("⚠️ Índice de mundo inválido")
+            print("Indice de mundo invalido.")
     
     def restart_from_beginning(self):
-        """
-        ✅ MODIFICADO: Regenera mundos antes de reiniciar
-        """
-        print("\n🔄 Reiniciando juego...")
+        """Reinicia el juego completamente desde el primer nivel."""
+        print("\nReiniciando sistema...")
         
-        # ✅ Regenerar mundos si hay generadores
         if self.world_generators:
             self._regenerate_worlds()
         
-        # Resetear jugador
         self.player = Player(100, 100)
-        
-        # Cargar primer mundo
         self.current_world_index = 0
         self.load_current_world()
     
     def quit_game(self):
-        """Cierra el juego"""
-        print("👋 Saliendo del juego...")
+        """Finaliza la ejecucion del juego."""
         self.running = False
     
     def update(self):
-        """Actualiza la lógica del juego"""
-
-        # Solo actualizar si estamos jugando
+        """
+        Logica principal de actualizacion por frame.
+        Solo actualiza entidades si el estado es PLAYING.
+        """
         if self.menu_manager.current_state != GameState.PLAYING:
             return
         
-        # Actualizar jugador
         platform_data = self.world_loader.get_platform_data()
         self.player.update(platform_data, self.world_width)
         
-        # Actualizar enemigos
         for enemy in self.world_loader.enemies:
             enemy.update(
                 platform_data,
@@ -216,19 +209,16 @@ class Game:
                 self.world_width
             )
         
-        # Eliminar enemigos muertos
         self.world_loader.enemies = [
             e for e in self.world_loader.enemies 
             if not e.should_be_removed()
         ]
         
-        # Eliminar PowerUps recolectados
         self.world_loader.powerups = [
             p for p in self.world_loader.powerups 
             if not p.collected
         ]
         
-        # Verificar colisiones
         self.collision_manager.check_all_collisions(
             self.player,
             self.world_loader.checkpoints,
@@ -239,98 +229,76 @@ class Game:
             self.world_loader.world_name
         )
         
-        # Actualizar cámara
         self.camera.update(self.player.x, self.player.width)
     
     def draw(self):
-        """Dibuja todos los elementos del juego"""
-
-        # Si estamos en menú principal, solo dibujar menú
+        """Renderiza el estado actual del juego o el menu correspondiente."""
         if self.menu_manager.current_state == GameState.MAIN_MENU:
             self.menu_manager.draw_current_menu()
             return
         
-
-        # Fondo (cielo)
+        # Renderizado del mundo
         sky_color = self.world_loader.colors.get('sky', (135, 206, 235))
         self.screen.fill(sky_color)
         
         camera_x = self.camera.get_x()
         
-        # Dibujar plataformas
         for platform in self.world_loader.platforms:
             platform.draw(self.screen, camera_x)
         
-        # Dibujar espinas
         for spike in self.world_loader.spikes:
             spike.draw(self.screen, camera_x)
         
-        # Dibujar PowerUps
         for powerup in self.world_loader.powerups:
             powerup.draw(self.screen, camera_x)
         
-        # Dibujar checkpoints
         for checkpoint in self.world_loader.checkpoints:
             checkpoint.draw(self.screen, camera_x)
         
-        # Dibujar enemigos
         for enemy in self.world_loader.enemies:
             enemy.draw(self.screen, camera_x)
         
-        # Dibujar goal
         if self.world_loader.goal:
             self.world_loader.goal.draw(self.screen, camera_x)
         
-        # Dibujar jugador
         self.player.draw(self.screen, camera_x)
         
-        # Dibujar UI
         self.ui_renderer.draw_ui(
             self.world_loader.world_name,
             self.player.lives
         )
 
-        # Dibujar menú encima si no estamos en PLAYING
         if self.menu_manager.current_state != GameState.PLAYING:
             self.menu_manager.draw_current_menu(self.world_loader.world_name)
     
     def run(self):
-        """Loop principal del juego"""
+        """Bucle principal (Game Loop)."""
         mouse_clicked = False
         
         while self.running:
             mouse_clicked = False
             
-            # Eventos
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.running = False
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
-                        # ESC en menú principal = salir
                         if self.menu_manager.current_state == GameState.MAIN_MENU:
                             self.running = False
                 elif event.type == pygame.MOUSEBUTTONDOWN:
-                    if event.button == 1:  # Click izquierdo
+                    if event.button == 1:
                         mouse_clicked = True
             
-            # Manejar input según estado
             if self.menu_manager.current_state == GameState.PLAYING:
-                # Input del juego (Command Pattern)
                 keys = pygame.key.get_pressed()
                 self.input_handler.handle_input(keys, self.player)
-                
-                # Actualizar
                 self.update()
             else:
-                # Input de menús
                 mouse_pos = pygame.mouse.get_pos()
                 self.menu_manager.handle_click(mouse_pos, mouse_clicked)
             
-            # Dibujar
             self.draw()
             
-            # Actualizar pantalla
             pygame.display.flip()
             self.clock.tick(GameConfig.FPS)
         
